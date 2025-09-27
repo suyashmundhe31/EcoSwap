@@ -27,8 +27,9 @@ const SolarPanelForm = ({ navigate }) => {
   const [carbonCredits, setCarbonCredits] = useState(null);
   const [isCalculatingCredits, setIsCalculatingCredits] = useState(false);
   const [showMintingSuccess, setShowMintingSuccess] = useState(false);
-
-  
+  const [isMinting, setIsMinting] = useState(false);
+  const [mintingResult, setMintingResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
   const handleFileUpload = async (field, file) => {
     if (!file) return;
@@ -77,8 +78,8 @@ const SolarPanelForm = ({ navigate }) => {
             );
             
             if (solarResult.success) {
-              console.log('Solar calculation result:', solarResult.data);
-              setCarbonCredits(solarResult.data);
+              console.log('Solar calculation result:', solarResult);
+              setCarbonCredits(solarResult);
               setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)} | Solar potential calculated!`);
               
               // Automatically trigger carbon coin minting after successful calculation
@@ -115,11 +116,6 @@ const SolarPanelForm = ({ navigate }) => {
     }
   };
 
-  
-
-  
-
-
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
@@ -129,6 +125,8 @@ const SolarPanelForm = ({ navigate }) => {
 
   const handleMintingClose = () => {
     setShowMintingSuccess(false);
+    // Navigate to carbon coin history page
+    navigate('/user/carbon-coins');
   };
 
   const handleMintMore = () => {
@@ -147,6 +145,59 @@ const SolarPanelForm = ({ navigate }) => {
     setCarbonCredits(null);
     setApplicationResult(null);
     setCoordinates(null);
+    setMintingResult(null);
+  };
+
+  // Updated mintCarbonCoins function to use our API 3
+  const mintCarbonCoins = async () => {
+    if (!applicationResult?.id || !carbonCredits) {
+      setError('No application or carbon credit data available for minting');
+      return;
+    }
+
+    setIsMinting(true);
+    setError(null);
+
+    try {
+      // API 3: Create carbon token
+      const tokenData = {
+        application_id: applicationResult.id,
+        name: formData.fullName || 'Solar Panel Project',
+        credits: carbonCredits.annual_carbon_credits || carbonCredits.annual_co2_avoided_tonnes
+      };
+      
+      const tokenResult = await solarPanelApiService.createCarbonToken(tokenData);
+      console.log('Carbon token created:', tokenResult);
+      
+      // Format the result for the UI
+      const result = {
+        data: {
+          issue_id: tokenResult.id,
+          carbon_coins: {
+            annual: tokenResult.credits
+          },
+          tokenized_date: tokenResult.tokenized_date
+        }
+      };
+      
+      setMintingResult(result);
+      
+      // Update carbon credits with minting info
+      setCarbonCredits(prev => ({
+        ...prev,
+        mintingResult: result,
+        issueId: result.data?.issue_id
+      }));
+      
+      setShowMintingSuccess(true);
+      setSuccess(`Successfully minted ${result.data?.carbon_coins?.annual || 0} carbon coins!`);
+      
+    } catch (err) {
+      console.error('Minting error:', err);
+      setError(err.message || 'Failed to mint carbon coins');
+    } finally {
+      setIsMinting(false);
+    }
   };
 
   const validateForm = () => {
@@ -194,6 +245,7 @@ const SolarPanelForm = ({ navigate }) => {
     return true;
   };
 
+  // Updated handleSubmit function to use our APIs
   const handleSubmit = async () => {
     console.log('Submit button clicked, current step:', currentStep);
     
@@ -210,20 +262,49 @@ const SolarPanelForm = ({ navigate }) => {
       setTimeout(async () => {
         setIsLoading(true);
         try {
-          const result = await solarPanelApiService.createApplication(formData);
-          console.log('Application created:', result);
-          setApplicationResult(result);
+          // API 1: Create application
+          const application = await solarPanelApiService.createApplication(formData);
+          console.log('Application created:', application);
+          setApplicationResult(application);
           
-          // If carbon credits are included in response
-          if (result.carbon_credits) {
-            setCarbonCredits({
-              success: true,
-              data: result.carbon_credits
-            });
+          // If coordinates are available, save analysis results
+          if (coordinates) {
+            // API 2: Save solar analysis results
+            const analysisData = {
+              application_id: application.id,
+              latitude: coordinates.latitude,
+              longitude: coordinates.longitude,
+              co2_emission_saved: carbonCredits?.annual_co2_avoided_tonnes || 8.2,
+              annual_mwh: carbonCredits?.annual_energy_mwh || 12.5,
+              annual_carbon_credits: carbonCredits?.annual_carbon_credits || 8.2
+            };
+            
+            const analysisResult = await solarPanelApiService.saveSolarAnalysisResults(analysisData);
+            console.log('Analysis saved:', analysisResult);
+            setAnalysisResult(analysisResult);
+            
+            // If no carbon credits data yet, set it from analysis result
+            if (!carbonCredits) {
+              setCarbonCredits({
+                success: true,
+                annual_energy_mwh: analysisResult.annual_mwh,
+                annual_co2_avoided_tonnes: analysisResult.co2_emission_saved,
+                annual_carbon_credits: analysisResult.annual_carbon_credits,
+                carbon_coins: {
+                  annual: analysisResult.annual_carbon_credits,
+                  ten_year: analysisResult.annual_carbon_credits * 10
+                },
+                calculation_method: "IPCC Guidelines for Renewable Energy",
+                panel_count: 20,
+                estimated_capacity_kw: analysisResult.annual_mwh * 0.8 // Estimated
+              });
+            }
           }
+          
         } catch (err) {
           console.error('Submission error:', err);
-          // Don't stop the flow, just log the error
+          setError('Error submitting application: ' + err.message);
+          // Don't stop the flow, we'll continue anyway
         } finally {
           setIsLoading(false);
         }
@@ -239,10 +320,14 @@ const SolarPanelForm = ({ navigate }) => {
 
   const renderMapsView = () => {
     // Show carbon coin minting success interface if available
-    if (showMintingSuccess && carbonCredits) {
+    if (showMintingSuccess && carbonCredits && mintingResult) {
       return (
         <CarbonCoinMintingSuccess
-          carbonCredits={carbonCredits}
+          carbonCredits={{
+            ...carbonCredits,
+            mintingResult: mintingResult,
+            type: 'solar_panel'
+          }}
           coordinates={coordinates}
           onClose={handleMintingClose}
           onMintMore={handleMintMore}
@@ -305,32 +390,69 @@ const SolarPanelForm = ({ navigate }) => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xs text-green-700">Panel Count</p>
-                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.panel_count}</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data?.panel_count || carbonCredits.panel_count || 20}</p>
                 </div>
                 <div>
                   <p className="text-xs text-green-700">System Capacity</p>
-                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.estimated_capacity_kw} kW</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data?.estimated_capacity_kw || carbonCredits.estimated_capacity_kw || carbonCredits.annual_energy_mwh * 0.2} kW</p>
                 </div>
                 <div>
                   <p className="text-xs text-green-700">Annual Energy</p>
-                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.annual_energy_mwh} MWh</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data?.annual_energy_mwh || carbonCredits.annual_energy_mwh} MWh</p>
                 </div>
                 <div>
                   <p className="text-xs text-green-700">Carbon Credits/Year</p>
-                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.carbon_coins?.annual?.toFixed(2)}</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data?.annual_carbon_credits || carbonCredits.annual_carbon_credits}</p>
                 </div>
               </div>
               
               {/* Mint Carbon Coins Button */}
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => setShowMintingSuccess(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl"
-                  style={{fontFamily: 'Space Mono, monospace'}}
-                >
-                  🪙 Mint Carbon Coins
-                </button>
-              </div>
+              {!mintingResult && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={mintCarbonCoins}
+                    disabled={isMinting}
+                    className={`px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl ${
+                      isMinting 
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                        : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600'
+                    }`}
+                    style={{fontFamily: 'Space Mono, monospace'}}
+                  >
+                    {isMinting ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Minting Coins...</span>
+                      </div>
+                    ) : (
+                      '🪙 Mint Carbon Coins'
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Show Minted Coins Result */}
+              {mintingResult && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg border-2 border-yellow-400">
+                  <div className="text-center">
+                    <h4 className="text-lg font-bold text-yellow-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      ✅ CARBON COINS MINTED SUCCESSFULLY!
+                    </h4>
+                    <div className="text-2xl font-bold text-yellow-600 mb-2">
+                      {mintingResult.data?.carbon_coins?.annual || 0} Carbon Coins
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Issue ID: {mintingResult.data?.issue_id}
+                    </p>
+                    <button
+                      onClick={() => setShowMintingSuccess(true)}
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -371,8 +493,14 @@ const SolarPanelForm = ({ navigate }) => {
             {applicationResult && (
               <div className="mt-4 text-sm text-gray-600" style={{fontFamily: 'Space Mono, monospace'}}>
                 <p>Application ID: {applicationResult.id}</p>
-                <p>Status: {applicationResult.status}</p>
+                <p>Status: {applicationResult.status || "pending"}</p>
                 <p>Submitted: {new Date(applicationResult.created_at).toLocaleDateString()}</p>
+                
+                {mintingResult && (
+                  <p className="text-green-600 font-bold mt-2">
+                    Carbon Coins Minted: {mintingResult.data?.carbon_coins?.annual || 0}
+                  </p>
+                )}
                 
                 {isCalculatingCredits && (
                   <div className="mt-3 animate-pulse">
@@ -380,7 +508,7 @@ const SolarPanelForm = ({ navigate }) => {
                   </div>
                 )}
                 
-                {carbonCredits && carbonCredits.success && (
+                {carbonCredits && (
                   <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-300">
                     <h4 className="text-lg font-bold text-yellow-800 mb-2">🪙 Carbon Coins Earned</h4>
                     <div className="mb-3 p-2 bg-yellow-200 rounded-lg border border-yellow-400">
@@ -393,248 +521,38 @@ const SolarPanelForm = ({ navigate }) => {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <p className="text-xs text-yellow-700 font-semibold">Annual Carbon Coins:</p>
-                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.data.carbon_coins.annual.toFixed(2)} coins</p>
-                        <p className="text-xs text-yellow-600">= {carbonCredits.data.annual_co2_avoided_tonnes.toFixed(2)} tons CO₂ avoided</p>
+                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.carbon_coins?.annual.toFixed(2) || carbonCredits.annual_carbon_credits.toFixed(2)} coins</p>
+                        <p className="text-xs text-yellow-600">= {carbonCredits.annual_co2_avoided_tonnes.toFixed(2)} tons CO₂ avoided</p>
                       </div>
                       <div>
                         <p className="text-xs text-yellow-700 font-semibold">10-Year Projection:</p>
-                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.data.carbon_coins.ten_year.toFixed(2)} coins</p>
-                        <p className="text-xs text-yellow-600">= {(carbonCredits.data.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided</p>
+                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.carbon_coins?.ten_year.toFixed(2) || (carbonCredits.annual_carbon_credits * 10).toFixed(2)} coins</p>
+                        <p className="text-xs text-yellow-600">= {(carbonCredits.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided</p>
                       </div>
                     </div>
                     <div className="mt-3 text-xs text-yellow-700">
-                      <p>Energy Generation: {carbonCredits.data.annual_energy_mwh.toFixed(2)} MWh/year</p>
-                      <p>CO₂ Avoided: {carbonCredits.data.annual_co2_avoided_tonnes.toFixed(2)} tonnes/year</p>
+                      <p>Energy Generation: {carbonCredits.annual_energy_mwh.toFixed(2)} MWh/year</p>
+                      <p>CO₂ Avoided: {carbonCredits.annual_co2_avoided_tonnes.toFixed(2)} tonnes/year</p>
                     </div>
                   </div>
                 )}
               </div>
             )}
-          </div>
-        </FadeInUp>
-      );
-    }
 
-    if (showMaps) {
-      // Use coordinates from application result, with fallback
-      const lat = applicationResult?.latitude || 13.0827;
-      const lon = applicationResult?.longitude || 77.5877;
-      const hasRealGPS = applicationResult?.latitude && 
-                         applicationResult?.latitude !== 13.0827;
-      
-      return (
-        <FadeInUp>
-          <div className="bg-gray-200 rounded-2xl p-6">
-            <div className="text-center mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2" 
-                  style={{fontFamily: 'Space Mono, monospace'}}>
-                {hasRealGPS ? 'Extracted' : 'Default'} Co-ordinates Summary ({lat.toFixed(6)}, {lon.toFixed(6)})
-              </h3>
-              {!hasRealGPS && (
-                <p className="text-sm text-yellow-600 mt-1">
-                  Using default Bangalore location (GPS not found in photo)
-                </p>
-              )}
+            <div className="mt-6 space-y-3">
+              <button
+                onClick={() => navigate('/user/carbon-coins')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors mr-3"
+              >
+                View Carbon Coin History
+              </button>
+              <button
+                onClick={handleMintMore}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Start New Application
+              </button>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Street View Map */}
-              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
-                <div className="p-2 bg-gray-100">
-                  <h4 className="text-sm font-medium text-gray-700 text-center">Street View</h4>
-                </div>
-                <MapComponent 
-                  latitude={lat} 
-                  longitude={lon} 
-                  mapType="street" 
-                  title="Solar Installation Site"
-                  height="300px"
-                />
-              </div>
-
-              {/* Satellite View Map */}
-              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
-                <div className="p-2 bg-gray-100">
-                  <h4 className="text-sm font-medium text-gray-700 text-center">Satellite View</h4>
-                </div>
-                <MapComponent 
-                  latitude={lat} 
-                  longitude={lon} 
-                  mapType="satellite" 
-                  title="Solar Installation Site"
-                  height="300px"
-                />
-              </div>
-            </div>
-            
-            {/* COMPREHENSIVE SOLAR ENERGY CALCULATION RESULTS */}
-            {carbonCredits && (
-              <div className="mt-8">
-                <div className="bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 rounded-2xl p-8 border-2 border-green-300 shadow-lg">
-                  {/* Header */}
-                  <div className="text-center mb-8">
-                    <h3 className="text-2xl font-bold text-gray-900 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                      🌞 SOLAR ENERGY ANALYSIS RESULTS
-                    </h3>
-                    <p className="text-sm text-gray-600" style={{fontFamily: 'Space Mono, monospace'}}>
-                      Calculated for coordinates: {lat.toFixed(6)}, {lon.toFixed(6)}
-                    </p>
-                  </div>
-                  
-                  {/* Main Metrics Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    {/* Annual Energy Generation */}
-                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-blue-200">
-                      <div className="text-4xl font-bold text-blue-600 mb-2">
-                        {carbonCredits.annual_energy_mwh} MWh
-                      </div>
-                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                        Annual Energy Generation
-                      </div>
-                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
-                        Clean renewable energy
-                      </div>
-                    </div>
-                    
-                    {/* CO2 Avoided */}
-                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-green-200">
-                      <div className="text-4xl font-bold text-green-600 mb-2">
-                        {carbonCredits.annual_co2_avoided_tonnes} tonnes
-                      </div>
-                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                        CO2 Emissions Avoided
-                      </div>
-                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
-                        Environmental impact
-                      </div>
-                    </div>
-                    
-                    {/* Carbon Credits */}
-                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-purple-200">
-                      <div className="text-4xl font-bold text-purple-600 mb-2">
-                        {carbonCredits.annual_carbon_credits}
-                      </div>
-                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                        Carbon Credits/Year
-                      </div>
-                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
-                        Verified carbon units
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Carbon Coins Section */}
-                  {carbonCredits.carbon_coins && (
-                    <div className="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl p-6 border-2 border-yellow-300 shadow-lg">
-                      <div className="text-center mb-4">
-                        <h4 className="text-xl font-bold text-yellow-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                          🪙 CARBON COINS EARNED
-                        </h4>
-                        <div className="text-sm font-bold text-yellow-700 bg-yellow-200 px-3 py-1 rounded-full inline-block" style={{fontFamily: 'Space Mono, monospace'}}>
-                          CONVERSION RATE: 1 TON CO2 = 1 CARBON COIN
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Annual Coins */}
-                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-                          <div className="text-3xl font-bold text-yellow-600 mb-1">
-                            {carbonCredits.carbon_coins.annual} coins
-                          </div>
-                          <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
-                            Per Year
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                            = {carbonCredits.annual_co2_avoided_tonnes} tons CO₂ avoided
-                          </div>
-                        </div>
-                        
-                        {/* 10-Year Coins */}
-                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-                          <div className="text-3xl font-bold text-orange-600 mb-1">
-                            {carbonCredits.carbon_coins.ten_year} coins
-                          </div>
-                          <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
-                            10-Year Total
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                            = {(carbonCredits.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Conversion Rate Display */}
-                      <div className="mt-4 p-3 bg-yellow-200 rounded-lg border border-yellow-400">
-                        <div className="text-center">
-                          <div className="text-sm font-bold text-yellow-800 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                            💰 CARBON COIN CONVERSION
-                          </div>
-                          <div className="text-xs text-yellow-700" style={{fontFamily: 'Space Mono, monospace'}}>
-                            Every 1 ton of CO₂ emissions avoided = 1 Carbon Coin earned
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Calculation Method */}
-                      <div className="mt-4 text-center">
-                        <div className="text-sm text-yellow-700 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
-                          Calculation Method: {carbonCredits.calculation_method}
-                        </div>
-                        {carbonCredits.carbon_coins.issue_date && (
-                          <div className="text-xs text-yellow-600 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                            Issued: {new Date(carbonCredits.carbon_coins.issue_date).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Mint Carbon Coins Button */}
-                  <div className="mt-6 text-center">
-                    <button
-                      onClick={() => setShowMintingSuccess(true)}
-                      className="px-8 py-4 bg-gradient-to-r from-yellow-500 via-orange-500 to-yellow-600 text-white rounded-xl font-bold hover:from-yellow-600 hover:via-orange-600 hover:to-yellow-700 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105"
-                      style={{fontFamily: 'Space Mono, monospace'}}
-                    >
-                      🪙 MINT CARBON COINS NOW
-                    </button>
-                    <p className="text-xs text-gray-500 mt-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                      Convert your environmental impact into digital carbon coins
-                    </p>
-                  </div>
-
-                  {/* Additional Information */}
-                  <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="text-center">
-                      <div className="text-sm font-semibold text-gray-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                        📊 CALCULATION ASSUMPTIONS
-                      </div>
-                      <div className="text-xs text-gray-600 space-y-1" style={{fontFamily: 'Space Mono, monospace'}}>
-                        <div>• 20 solar panels × 400W each = 8kW system capacity</div>
-                        <div>• 5 peak sun hours per day average</div>
-                        <div>• 85% system efficiency factor</div>
-                        <div>• 0.5 kg CO2/kWh grid emission factor</div>
-                        <div>• 1 carbon credit = 1 tonne CO2 avoided</div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* DEBUG: Raw Calculation Data */}
-                  <div className="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
-                    <div className="text-center mb-3">
-                      <div className="text-sm font-bold text-gray-800" style={{fontFamily: 'Space Mono, monospace'}}>
-                        🔍 RAW CALCULATION DATA (DEBUG)
-                      </div>
-                    </div>
-                    <div className="bg-white rounded p-3 text-xs" style={{fontFamily: 'Space Mono, monospace'}}>
-                      <pre className="whitespace-pre-wrap text-gray-700">
-{JSON.stringify(carbonCredits, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </FadeInUp>
       );

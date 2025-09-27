@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey
+# app/models/solar_panel.py
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 
 class SolarPanelApplication(Base):
-    __tablename__ = "solar_panel_applications"
+    __tablename__ = "solar_panel_applications_v2"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -20,25 +21,44 @@ class SolarPanelApplication(Base):
     energy_certification_path = Column(String, nullable=True)
     geotag_photo_path = Column(String, nullable=True)
     
-    # Location data extracted from geotagged photo
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship
+    user = relationship("User", back_populates="solar_panel_applications")
+
+
+class SolarAnalysisResult(Base):
+    __tablename__ = "solar_analysis_results_v2"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("solar_panel_applications_v2.id"), nullable=False)
+    
+    # Analysis results
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    
-    # Application status
-    status = Column(String, default="pending")  # pending, verified, approved, rejected
-    
-    # Verification data
-    verification_notes = Column(Text, nullable=True)
-    verified_at = Column(DateTime(timezone=True), nullable=True)
+    co2_emission_saved = Column(Float, nullable=True)
+    annual_mwh = Column(Float, nullable=True)
+    annual_carbon_credits = Column(Float, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
-    user = relationship("User", back_populates="solar_panel_applications")
+    # Relationship
+    application = relationship("SolarPanelApplication")
+
+
+class CarbonToken(Base):
+    __tablename__ = "carbon_tokens_v2"
     
-    # These columns are commented out as they don't exist in the database yet
-    # carbon_credits_data = Column(Text, nullable=True)  # JSON storage for detailed calculations
-    # carbon_coins_issued = Column(Float, default=0)  # Number of carbon coins issued
-    # calculation_date = Column(DateTime(timezone=True), nullable=True)
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("solar_panel_applications_v2.id"), nullable=False)
+    
+    # Token information
+    name = Column(String, nullable=False)
+    credits = Column(Float, nullable=False)
+    source = Column(String, default="solar")
+    tokenized_date = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship
+    application = relationship("SolarPanelApplication")

@@ -567,7 +567,7 @@ class ForestationService:
             return {'error': f'Complete forest analysis failed: {str(e)}'}
     
     def calculate_carbon_credits(self, application_id: int, user_id: int) -> Dict:
-        """Calculate carbon credits for an approved application - Legacy method"""
+        """Calculate carbon credits for an approved application and create marketplace credits"""
         application = self.get_application(application_id, user_id)
         if not application:
             return {'error': 'Application not found'}
@@ -581,7 +581,51 @@ class ForestationService:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.perform_complete_forest_analysis(application_id, user_id))
+            
+            if 'error' in result:
+                return result
+            
+            # Extract carbon credits from the analysis result
+            carbon_credits_data = result.get('carbon_credit_calculations', {})
+            annual_carbon_coins = carbon_credits_data.get('annual_carbon_credits', 0)
+            
+            if annual_carbon_coins > 0:
+                # Create marketplace credit entry
+                from app.services.marketplace_service import MarketplaceService
+                from app.schemas.marketplace import MarketplaceCreditCreate, SourceType
+                
+                marketplace_service = MarketplaceService(self.db)
+                
+                # Get user information for issuer
+                from app.models.user import User
+                user = self.db.query(User).filter(User.id == user_id).first()
+                issuer_name = user.username if user else f"User_{user_id}"
+                
+                credit_data = MarketplaceCreditCreate(
+                    issuer_name=issuer_name,
+                    issuer_id=user_id,
+                    coins_issued=annual_carbon_coins,
+                    source_type=SourceType.FORESTATION,
+                    source_project_id=application_id,
+                    description=f"Forestation carbon credits - {application.full_name} - {carbon_credits_data.get('total_area_ha', 0)} hectares",
+                    price_per_coin=None  # Can be set later
+                )
+                
+                # Save to marketplace credits database
+                marketplace_credit = marketplace_service.create_marketplace_credit(credit_data)
+                
+                # Update the result to include marketplace credit info
+                result['marketplace_credit'] = {
+                    'id': marketplace_credit.id,
+                    'coins_issued': marketplace_credit.coins_issued,
+                    'verification_status': marketplace_credit.verification_status,
+                    'issue_date': marketplace_credit.issue_date.isoformat()
+                }
+                
+                result['message'] = f"Carbon credits calculated and {annual_carbon_coins} coins minted to marketplace!"
+            
             return result
+            
         except Exception as e:
             return {'error': f'Carbon credit calculation failed: {str(e)}'}
     
@@ -613,10 +657,6 @@ class ForestationService:
             # Carbon coins (1 ton CO2 = 1 carbon coin)
             annual_carbon_coins = annual_co2_sequestered
             
-            # 20-year projection (typical forest maturity period)
-            lifetime_co2_sequestered = annual_co2_sequestered * 20
-            lifetime_carbon_coins = annual_carbon_coins * 20
-            
             return {
                 'success': True,
                 'data': {
@@ -625,8 +665,6 @@ class ForestationService:
                     'sequestration_rate_per_hectare': sequestration_rate,
                     'annual_co2_sequestered_tonnes': round(annual_co2_sequestered, 2),
                     'annual_carbon_coins': round(annual_carbon_coins, 2),  # 1 ton CO2 = 1 carbon coin
-                    'lifetime_co2_sequestered_tonnes': round(lifetime_co2_sequestered, 2),
-                    'lifetime_carbon_coins': round(lifetime_carbon_coins, 2),  # 1 ton CO2 = 1 carbon coin
                     'conversion_rate': '1 ton CO2 = 1 carbon coin',
                     'calculation_method': 'IPCC Forest Carbon Sequestration Guidelines',
                     'coordinates': f"{latitude}, {longitude}",
@@ -638,4 +676,32 @@ class ForestationService:
             return {
                 'success': False,
                 'error': f'Forestation carbon credit calculation failed: {str(e)}'
+            }
+    
+    def mint_carbon_coins_to_system(self, user_id: int, coins_issued: float, 
+                                   source_application_id: int, description: str = None) -> Dict:
+        """Mint carbon coins and store in the central carbon coins system"""
+        try:
+            from app.services.carbon_coin_service import CarbonCoinService
+            from app.models.carbon_coins import CoinSource
+            
+            # Initialize carbon coin service
+            coin_service = CarbonCoinService(self.db)
+            
+            # Mint coins with forestation source
+            result = coin_service.mint_carbon_coins(
+                user_id=user_id,
+                coins_issued=coins_issued,
+                source=CoinSource.FORESTATION,
+                source_application_id=source_application_id,
+                description=description,
+                calculation_method="IPCC Guidelines for National Greenhouse Gas Inventories"
+            )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to mint carbon coins: {str(e)}'
             }

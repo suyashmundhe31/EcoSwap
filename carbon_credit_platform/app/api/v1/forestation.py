@@ -4,6 +4,7 @@ from typing import List, Optional
 import json
 
 from app.database import get_db
+from app.api.deps import get_current_user
 from app.models.forestation import ForestationApplication
 from app.services.forestation_service import ForestationService
 from app.schemas.forestation import (
@@ -339,27 +340,93 @@ async def perform_forest_analysis(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forest analysis failed: {str(e)}")
 
-@router.post("/applications/{application_id}/calculate-carbon-credits")
-async def calculate_application_carbon_credits(
+@router.post("/applications/{application_id}/mint-coins")
+async def mint_forestation_coins(
     application_id: int,
-    db: Session = Depends(get_db)
+    issuer_name: str = Form(...),
+    description: str = Form(None),
+    price_per_coin: float = Form(None),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
-    """Calculate carbon credits for an approved forestation application"""
+    """Mint carbon coins for an approved forestation application and save to marketplace"""
     try:
-        service = ForestationService(db)
-        user_id = 1  # TODO: Get from authenticated user
+        from app.services.marketplace_service import MarketplaceService
+        from app.schemas.marketplace import MarketplaceCreditCreate, SourceType
         
-        result = service.calculate_carbon_credits(application_id, user_id)
+        service = ForestationService(db)
+        
+        # Get the application
+        application = service.get_application(application_id, current_user.id)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        if application.status != 'approved':
+            raise HTTPException(status_code=400, detail="Application must be approved before minting coins")
+        
+        # Calculate carbon credits
+        result = service.calculate_carbon_credits(application_id, current_user.id)
         
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])
         
-        return result
+        # Extract carbon credits from the result
+        carbon_credits_data = result.get('carbon_credit_calculations', {})
+        annual_carbon_coins = carbon_credits_data.get('annual_carbon_credits', 0)
+        
+        if annual_carbon_coins <= 0:
+            raise HTTPException(status_code=400, detail="No carbon credits calculated for this application")
+        
+        # Create marketplace credit entry
+        marketplace_service = MarketplaceService(db)
+        
+        credit_data = MarketplaceCreditCreate(
+            issuer_name=issuer_name,
+            issuer_id=current_user.id,
+            coins_issued=annual_carbon_coins,
+            source_type=SourceType.FORESTATION,
+            source_project_id=application_id,
+            description=description or f"Forestation carbon credits - {application.full_name}",
+            price_per_coin=price_per_coin
+        )
+        
+        # Save to marketplace credits database
+        marketplace_credit = marketplace_service.create_marketplace_credit(credit_data)
+        
+        # Return minting result
+        minting_result = {
+            "success": True,
+            "message": f"Successfully minted {annual_carbon_coins} carbon coins for forestation project!",
+            "data": {
+                "marketplace_credit_id": marketplace_credit.id,
+                "application_id": application_id,
+                "carbon_coins": {
+                    "annual": annual_carbon_coins,
+                    "issue_date": marketplace_credit.issue_date.isoformat(),
+                    "conversion_rate": "1 ton CO2 = 1 carbon coin",
+                    "minting_status": "successful",
+                    "transaction_id": f"FC_{marketplace_credit.id}_{int(annual_carbon_coins)}"
+                },
+                "forestation_details": {
+                    "applicant_name": application.full_name,
+                    "coordinates": f"{application.latitude}, {application.longitude}",
+                    "area_hectares": carbon_credits_data.get('total_area_ha', 0),
+                    "forest_type": carbon_credits_data.get('forest_type', 'unknown')
+                },
+                "marketplace_info": {
+                    "verification_status": marketplace_credit.verification_status,
+                    "issuer_name": marketplace_credit.issuer_name,
+                    "price_per_coin": marketplace_credit.price_per_coin
+                }
+            }
+        }
+        
+        return minting_result
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Carbon credit calculation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error minting forestation coins: {str(e)}")
 
 @router.get("/")
 async def forestation_info():

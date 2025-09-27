@@ -1,6 +1,11 @@
 // API base URL - update this to match your backend server
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
+// Helper function to get auth token from localStorage
+const getAuthToken = () => {
+  return localStorage.getItem('authToken') || localStorage.getItem('token');
+};
+
 class SolarPanelApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
@@ -98,8 +103,10 @@ class SolarPanelApiService {
   }
 
 
-  // Calculate solar energy potential
+  // UPDATED: Calculate solar energy potential using your backend
   async calculateSolarEnergy(latitude, longitude, panelAreaSqm = null) {
+    console.log('API Service: Calculating solar energy for:', latitude, longitude);
+    
     const formData = new FormData();
     formData.append('latitude', latitude);
     formData.append('longitude', longitude);
@@ -112,11 +119,15 @@ class SolarPanelApiService {
       body: formData,
     });
 
-    return this.handleResponse(response);
+    const result = await this.handleResponse(response);
+    console.log('API Service: Solar calculation result:', result);
+    return result;
   }
 
-  // Extract GPS coordinates from photo in real-time
+  // NEW: Extract GPS coordinates from photo using OpenAI Vision API
   async extractGpsFromPhoto(photo) {
+    console.log('API Service: Extracting GPS from photo:', photo.name);
+    
     const formData = new FormData();
     formData.append('photo', photo);
 
@@ -125,7 +136,19 @@ class SolarPanelApiService {
       body: formData,
     });
 
-    return this.handleResponse(response);
+    const result = await this.handleResponse(response);
+    console.log('API Service: GPS extraction result:', result);
+    
+    // Convert to the format expected by your React component
+    return {
+      is_valid: result.success,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      message: result.message,
+      method: result.method,
+      confidence: result.confidence,
+      description: result.description
+    };
   }
 
   // Upload document
@@ -151,9 +174,20 @@ class SolarPanelApiService {
     formData.append('annual_co2_avoided_tonnes', solarCalculationData.annual_co2_avoided_tonnes);
     formData.append('annual_carbon_credits', solarCalculationData.annual_carbon_credits);
     formData.append('calculation_method', solarCalculationData.calculation_method);
+    
+    // Add new required parameters for marketplace credits
+    formData.append('issuer_name', solarCalculationData.issuer_name || 'Solar Panel Owner');
+    formData.append('description', solarCalculationData.description || 'Solar panel carbon credits');
+    formData.append('price_per_coin', solarCalculationData.price_per_coin || '');
+    if (solarCalculationData.source_project_id) {
+      formData.append('source_project_id', solarCalculationData.source_project_id);
+    }
 
     const response = await fetch(`${this.baseURL}/solar-panel/mint-carbon-coins`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`,
+      },
       body: formData,
     });
 
@@ -187,6 +221,132 @@ class SolarPanelApiService {
     const response = await fetch(`${this.baseURL}/solar-panel/admin/applications/${applicationId}/status`, {
       method: 'PUT',
       body: formData,
+    });
+
+    return this.handleResponse(response);
+  }
+
+  /**
+   * Mint carbon coins for a solar panel application using the new central system
+   * @param {Object} mintingData - Solar calculation data for minting
+   * @returns {Promise} - Minting result with issue_id and coin details
+   */
+  async mintCarbonCoinsToSystem(mintingData) {
+    try {
+      const formData = new FormData();
+      formData.append('latitude', mintingData.latitude);
+      formData.append('longitude', mintingData.longitude);
+      formData.append('annual_energy_mwh', mintingData.annual_energy_mwh);
+      formData.append('annual_co2_avoided_tonnes', mintingData.annual_co2_avoided_tonnes);
+      formData.append('annual_carbon_credits', mintingData.annual_carbon_credits);
+      formData.append('calculation_method', mintingData.calculation_method);
+      formData.append('issuer_name', mintingData.issuer_name || 'Solar Panel Owner');
+      formData.append('description', mintingData.description || 'Solar panel carbon credits');
+      formData.append('source_project_id', mintingData.source_project_id);
+
+      const response = await fetch(`${this.baseURL}/solar-panel/mint-carbon-coins`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to mint carbon coins');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error minting carbon coins:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's carbon coin history
+   * @param {number} skip - Pagination offset
+   * @param {number} limit - Number of items per page
+   * @param {string} source - Filter by source ('solar_panel' or 'forestation')
+   * @returns {Promise} - List of carbon coin issues
+   */
+  async getCarbonCoinHistory(skip = 0, limit = 100, source = null) {
+    try {
+      const params = new URLSearchParams({
+        skip: skip.toString(),
+        limit: limit.toString()
+      });
+      
+      if (source) {
+        params.append('source', source);
+      }
+
+      const response = await fetch(`${this.baseURL}/carbon-coins/?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch carbon coin history');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching carbon coin history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get carbon coin statistics for the user
+   * @returns {Promise} - User's carbon coin stats
+   */
+  async getCarbonCoinStats() {
+    try {
+      const response = await fetch(`${this.baseURL}/carbon-coins/stats`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch carbon coin stats');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching carbon coin stats:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Save analysis results to database
+  async saveSolarAnalysisResults(analysisData) {
+    console.log('API Service: Saving analysis results:', analysisData);
+    
+    const response = await fetch(`${this.baseURL}/solar-panel/analysis`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(analysisData),
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // NEW: Create carbon token
+  async createCarbonToken(tokenData) {
+    console.log('API Service: Creating carbon token:', tokenData);
+    
+    const response = await fetch(`${this.baseURL}/solar-panel/tokens`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(tokenData),
     });
 
     return this.handleResponse(response);

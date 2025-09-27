@@ -20,3 +20,4 @@ class User(Base):
     credits = relationship("CarbonCredit", back_populates="owner")
     bounties = relationship("Bounty", back_populates="creator")
     marketplace_credits = relationship("MarketplaceCredit", back_populates="issuer")
+    carbon_coin_issues = relationship("CarbonCoinIssue", back_populates="user")

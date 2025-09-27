@@ -24,26 +24,54 @@ const CarbonCoinMintingSuccess = ({
     try {
       setMintingStatus('minting');
       
-      // Import the API service
-      const solarPanelApiService = (await import('../../services/solarPanelApi')).default;
+      // Determine if this is solar panel or forestation minting
+      const isSolarPanel = carbonCredits.annual_energy_mwh !== undefined;
       
-      // Prepare data for minting
-      const mintingData = {
-        latitude: coordinates?.latitude || 13.0827,
-        longitude: coordinates?.longitude || 77.5877,
-        annual_energy_mwh: carbonCredits.annual_energy_mwh,
-        annual_co2_avoided_tonnes: carbonCredits.annual_co2_avoided_tonnes,
-        annual_carbon_credits: carbonCredits.annual_carbon_credits,
-        calculation_method: carbonCredits.calculation_method
-      };
+      if (isSolarPanel) {
+        // Solar Panel Minting
+        const solarPanelApiService = (await import('../../services/solarPanelApi')).default;
+        
+        const mintingData = {
+          latitude: coordinates?.latitude || 13.0827,
+          longitude: coordinates?.longitude || 77.5877,
+          annual_energy_mwh: carbonCredits.annual_energy_mwh,
+          annual_co2_avoided_tonnes: carbonCredits.annual_co2_avoided_tonnes,
+          annual_carbon_credits: carbonCredits.annual_carbon_credits,
+          calculation_method: carbonCredits.calculation_method,
+          issuer_name: 'Solar Panel Owner',
+          description: `Solar panel carbon credits - ${carbonCredits.annual_energy_mwh} MWh annual production`,
+          price_per_coin: 15.0
+        };
 
-      const result = await solarPanelApiService.mintCarbonCoins(mintingData);
-      
-      if (result.success) {
-        setMintingResult(result.data);
-        setMintingStatus('success');
+        const result = await solarPanelApiService.mintCarbonCoins(mintingData);
+        
+        if (result.success) {
+          setMintingResult(result.data);
+          setMintingStatus('success');
+        } else {
+          setMintingStatus('error');
+        }
       } else {
-        setMintingStatus('error');
+        // Forestation Minting
+        const forestationApiService = (await import('../../services/forestationApi')).default;
+        
+        const mintingData = {
+          issuer_name: 'Forestation Owner',
+          description: `Forestation carbon credits - ${carbonCredits.annual_carbon_coins} coins annually`,
+          price_per_coin: 20.0
+        };
+
+        // For forestation, we need the application ID - this should be passed as a prop
+        const applicationId = carbonCredits.application_id || 1; // fallback
+        
+        const result = await forestationApiService.mintCoins(applicationId, mintingData);
+        
+        if (result.success) {
+          setMintingResult(result.data);
+          setMintingStatus('success');
+        } else {
+          setMintingStatus('error');
+        }
       }
     } catch (error) {
       console.error('Minting error:', error);
