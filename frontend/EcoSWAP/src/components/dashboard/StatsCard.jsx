@@ -9,9 +9,9 @@ const StatsCard = ({
   icon 
 }) => {
   return (
-    <div className={`${bgColor} ${textColor} p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 border border-gray-100`}>
+    <div className={`${bgColor} ${textColor} p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 border border-gray-100 w-full h-40 flex flex-col justify-center`}>
       {icon && (
-        <div className="mb-4 flex items-center justify-start">
+        <div className="mb-3 flex items-center justify-start">
           {icon}
         </div>
       )}

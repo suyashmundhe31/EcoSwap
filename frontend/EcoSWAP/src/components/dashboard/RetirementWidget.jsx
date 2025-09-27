@@ -1,4 +1,5 @@
 import React from 'react';
+import coinImage from '../../assets/coin.png';
 
 const RetirementWidget = ({ coinsToRetire }) => {
   return (
@@ -9,8 +10,15 @@ const RetirementWidget = ({ coinsToRetire }) => {
       
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <div className="w-8 h-8 bg-yellow-400 rounded-full mr-4 animate-pulse-slow shadow-sm">
-          </div>
+          <img 
+            src={coinImage} 
+            alt="Coin" 
+            className="w-8 h-8 rounded-full mr-4 animate-pulse-slow shadow-sm"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.parentNode.innerHTML += '<div class="w-8 h-8 bg-yellow-400 rounded-full animate-pulse-slow shadow-sm"></div>';
+            }}
+          />
           <span className="text-3xl font-bold text-gray-900 tracking-tight">
             00{coinsToRetire}
           </span>

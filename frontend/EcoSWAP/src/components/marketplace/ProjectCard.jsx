@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ProjectCard = ({ project, solarImage, forestImage }) => {
+const ProjectCard = ({ project, solarImage, forestImage, coinImage }) => {
   const getProjectImage = () => {
     if (project.type === 'solar' && solarImage) {
       return solarImage;
@@ -8,10 +8,10 @@ const ProjectCard = ({ project, solarImage, forestImage }) => {
       return forestImage;
     }
     
-    // Fallback illustrations
+    // Fallback illustrations (no background)
     if (project.type === 'solar') {
       return (
-        <div className="w-full h-32 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center relative overflow-hidden">
+        <div className="w-full h-full flex items-center justify-center relative">
           {/* Solar Panel Illustration */}
           <div className="relative">
             <div className="w-20 h-12 bg-blue-600 rounded transform -rotate-12 shadow-lg"></div>
@@ -26,7 +26,7 @@ const ProjectCard = ({ project, solarImage, forestImage }) => {
       );
     } else {
       return (
-        <div className="w-full h-32 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center relative overflow-hidden">
+        <div className="w-full h-full flex items-center justify-center relative">
           {/* Tree Illustration */}
           <div className="flex space-x-2">
             <div className="relative">
@@ -51,44 +51,51 @@ const ProjectCard = ({ project, solarImage, forestImage }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:-translate-y-1">
-      {/* Project Image */}
-      <div className="mb-4">
-        {(project.type === 'solar' && solarImage) || (project.type === 'forest' && forestImage) ? (
-          <img 
-            src={project.type === 'solar' ? solarImage : forestImage}
-            alt={project.title}
-            className="w-full h-32 object-cover rounded-lg"
-          />
-        ) : (
-          getProjectImage()
-        )}
-      </div>
-
-      {/* Project Info */}
-      <div className="space-y-3">
-        <h3 className="font-semibold text-gray-900 text-sm leading-tight">
-          {project.title}
-        </h3>
-        
-        <div className="flex items-center text-xs text-gray-600">
-          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-          </svg>
-          {project.location}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-yellow-400 rounded-full"></div>
-            <span className="font-bold text-lg text-gray-900">{project.coins}</span>
-            <span className="text-xs text-gray-600">Available coins</span>
+    <div className="bg-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+      {/* Header with title and coins */}
+      <div className="flex justify-between items-start mb-4">
+        <div className="flex-1">
+          <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-1">
+            {project.title}
+          </h3>
+          <div className="flex items-center text-xs text-gray-600">
+            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+            </svg>
+            {project.location}
           </div>
         </div>
+        
+        <div className="text-right ml-4">
+          <div className="flex items-center justify-end space-x-1 mb-1">
+            <img src={coinImage} alt="Carbon Coin" className="w-6 h-6" />
+            <div className="font-bold text-lg text-gray-900">{project.coins}</div>
+          </div>
+          <div className="text-xs text-gray-600 whitespace-nowrap">Available coins</div>
+        </div>
+      </div>
 
-        <button className="w-full bg-black text-white py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors duration-200 hover:shadow-md">
-          Purchase
-        </button>
+      {/* Bottom section with image on left and button on right */}
+      <div className="flex items-end space-x-4">
+        {/* Project Image - Left side (larger, no background) */}
+        <div className="w-35 h-28">
+          {(project.type === 'solar' && solarImage) || (project.type === 'forest' && forestImage) ? (
+            <img 
+              src={project.type === 'solar' ? solarImage : forestImage}
+              alt={project.title}
+              className="w-full h-full object-cover rounded-lg"
+            />
+          ) : (
+            getProjectImage()
+          )}
+        </div>
+
+        {/* Purchase Button - Right side (medium) */}
+        <div className="flex-1">
+          <button className="w-full bg-black text-white py-3 px-6 rounded-full text-sm font-medium hover:bg-gray-800 transition-colors duration-200 hover:shadow-md">
+            Purchase
+          </button>
+        </div>
       </div>
     </div>
   );

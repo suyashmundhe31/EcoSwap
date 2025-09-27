@@ -30,6 +30,103 @@ const EnterpriseHistory = () => {
     setFilteredHistory(filtered);
   }, [statusFilter, searchTerm]);
 
+  // Helper function to escape CSV values
+  const escapeCSVValue = (value) => {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    // Escape quotes and wrap in quotes if contains comma, quote, or newline
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
+  // CSV Export functionality
+  const handleExportCSV = () => {
+    try {
+      if (filteredHistory.length === 0) {
+        alert('No data available to export');
+        return;
+      }
+
+      // Define CSV headers - adjust these based on your actual data structure
+      const headers = [
+        'Transaction ID',
+        'Project Name',
+        'Date',
+        'Amount',
+        'Status',
+        'Payment Method',
+        'Description',
+        'Category'
+      ];
+
+      // Convert data to CSV rows
+      const csvRows = filteredHistory.map(item => [
+        escapeCSVValue(item.id || item.transactionId || ''),
+        escapeCSVValue(item.project || item.projectName || ''),
+        escapeCSVValue(item.date || item.createdAt || ''),
+        escapeCSVValue(item.amount || item.total || ''),
+        escapeCSVValue(item.status || ''),
+        escapeCSVValue(item.paymentMethod || item.payment_method || item.method || ''),
+        escapeCSVValue(item.description || item.note || ''),
+        escapeCSVValue(item.category || item.type || '')
+      ]);
+
+      // Combine headers and rows
+      const csvContent = [
+        headers.join(','),
+        ...csvRows.map(row => row.join(','))
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        // Generate filename with timestamp
+        const now = new Date();
+        const timestamp = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const timeString = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS format
+        
+        let filename = `purchase-history-${timestamp}-${timeString}.csv`;
+        
+        // Add filter information to filename
+        const filterInfo = [];
+        if (statusFilter !== 'all') {
+          filterInfo.push(statusFilter.toLowerCase());
+        }
+        if (searchTerm) {
+          filterInfo.push('search-results');
+        }
+        
+        if (filterInfo.length > 0) {
+          filename = `purchase-history-${filterInfo.join('-')}-${timestamp}-${timeString}.csv`;
+        }
+        
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up the URL object
+        URL.revokeObjectURL(url);
+        
+        // Show success message
+        console.log(`CSV exported successfully: ${filename}`);
+      } else {
+        throw new Error('CSV download not supported in this browser');
+      }
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      alert('Error exporting CSV file. Please try again.');
+    }
+  };
+
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Page Title */}
@@ -102,7 +199,10 @@ const EnterpriseHistory = () => {
 
       {/* Purchase History Table */}
       <FadeInUp delay={300}>
-        <PurchaseHistory data={filteredHistory} />
+        <PurchaseHistory 
+          data={filteredHistory} 
+          onExportCSV={handleExportCSV}
+        />
       </FadeInUp>
 
       {/* No Results Message */}

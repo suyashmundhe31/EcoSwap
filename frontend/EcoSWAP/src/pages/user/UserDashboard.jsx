@@ -1,6 +1,7 @@
 import React from 'react';
 import FadeInUp from '../../components/animations/FadeInUp';
 import { USER_DASHBOARD_DATA } from '../../utils/userConstants';
+import coinImage from '../../assets/coin.png';
 
 const UserDashboard = () => {
   return (
@@ -11,7 +12,15 @@ const UserDashboard = () => {
           {/* Total Carbon Coin Issued */}
           <div className="bg-green-100 rounded-2xl p-6 shadow-sm border border-green-200">
             <div className="flex items-center mb-4">
-              <div className="w-6 h-6 bg-yellow-400 rounded-full mr-3"></div>
+              <img 
+                src={coinImage} 
+                alt="Coin" 
+                className="w-6 h-6 rounded-full mr-3"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentNode.innerHTML += '<div class="w-6 h-6 bg-yellow-400 rounded-full mr-3"></div>';
+                }}
+              />
             </div>
             <div className="text-4xl font-bold text-gray-900 mb-2">2000</div>
             <div className="text-sm text-gray-700">Total Carbon Coin Issued</div>
@@ -30,9 +39,6 @@ const UserDashboard = () => {
           {/* Current Average Price */}
           <div className="bg-gray-100 rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-6 bg-black rounded-full flex items-center">
-                <div className="w-8 h-1 bg-white rounded-full ml-1"></div>
-              </div>
             </div>
             <div className="text-4xl font-bold text-gray-900 mb-2">$28.91</div>
             <div className="text-sm text-gray-700">Current Average Price (1 carbon coin)</div>
