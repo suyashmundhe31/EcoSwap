@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/layout/Layout';
 
 // Enterprise Pages
@@ -21,7 +21,28 @@ function App() {
   const navigate = (path) => {
     console.log('Navigating to:', path);
     setCurrentPath(path);
+    // Update browser history
+    window.history.pushState({ path }, '', path);
   };
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const path = event.state?.path || '/';
+      console.log('Browser navigation to:', path);
+      setCurrentPath(path);
+    };
+
+    // Listen for browser back/forward
+    window.addEventListener('popstate', handlePopState);
+
+    // Initialize browser history
+    window.history.replaceState({ path: currentPath }, '', currentPath);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [currentPath]);
 
   const renderCurrentPage = () => {
     console.log('Current path:', currentPath);

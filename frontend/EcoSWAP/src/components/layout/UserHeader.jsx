@@ -44,18 +44,21 @@ const UserHeader = ({ currentPath, navigate }) => {
       
       {/* User Coins Display & Connect Wallet */}
       <div className="flex items-center space-x-4">
-        {/* User Coins Display with coin images */}
-        <div className="flex items-center space-x-2">
-          <img 
-            src={coinImage} 
-            alt="Coin" 
-            className="w-6 h-6 rounded-full"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.parentNode.innerHTML += '<div class="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center"><span class="text-xs font-bold text-yellow-900">+</span></div>';
-            }}
-          />
-          <span className="text-gray-800 font-semibold">2350</span>
+        {/* User Coins Display */}
+        <div className="flex items-center space-x-2 bg-gradient-to-r from-yellow-50 to-orange-50 px-4 py-2 rounded-lg border border-yellow-200">
+          <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
+            <span className="text-xs font-bold text-yellow-900">+</span>
+          </div>
+          <div className="w-6 h-6 bg-yellow-400 rounded-full"></div>
+          <div className="flex flex-col">
+            <span className="text-gray-800 font-bold text-lg">2350</span>
+            <span className="text-xs text-gray-600 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
+              Carbon Coins
+            </span>
+          </div>
+          <div className="ml-2 text-xs text-yellow-700 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
+            1 ton CO₂ = 1 coin
+          </div>
         </div>
         
         {/* Connect Wallet */}
