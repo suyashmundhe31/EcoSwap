@@ -7,8 +7,45 @@ const RetirementTable = ({ data }) => {
       : 'bg-yellow-100 text-yellow-800 border-yellow-200';
   };
 
+  // Function to export data as CSV
+  const exportToCSV = () => {
+    const headers = ['Retirement ID', 'Date', 'Coins', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => [
+        row.id,
+        row.date,
+        row.coins,
+        row.status
+      ].join(','))
+    ].join('\n');
+
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `retirement_history_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+      {/* Header with Export Button */}
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">Transaction History</h3>
+        <button 
+          onClick={exportToCSV}
+          className="text-sm text-gray-600 hover:text-gray-800 flex items-center transition-colors duration-200 font-medium hover:underline"
+        >
+          Export 
+          <span className="ml-1 transform hover:translate-x-1 transition-transform">↗</span>
+        </button>
+      </div>
+
       {/* Table Header */}
       <div className="grid grid-cols-4 gap-4 text-sm text-gray-600 mb-6 pb-3 border-b border-gray-200">
         <div className="font-semibold uppercase tracking-wider">Retirement ID</div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import coinImage from '../../assets/coin.png';
 
 const UserHeader = ({ currentPath, navigate }) => {
   const navItems = [
@@ -43,12 +44,17 @@ const UserHeader = ({ currentPath, navigate }) => {
       
       {/* User Coins Display & Connect Wallet */}
       <div className="flex items-center space-x-4">
-        {/* User Coins Display */}
+        {/* User Coins Display with coin images */}
         <div className="flex items-center space-x-2">
-          <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-            <span className="text-xs font-bold text-yellow-900">+</span>
-          </div>
-          <div className="w-6 h-6 bg-yellow-400 rounded-full"></div>
+          <img 
+            src={coinImage} 
+            alt="Coin" 
+            className="w-6 h-6 rounded-full"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.parentNode.innerHTML += '<div class="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center"><span class="text-xs font-bold text-yellow-900">+</span></div>';
+            }}
+          />
           <span className="text-gray-800 font-semibold">2350</span>
         </div>
         

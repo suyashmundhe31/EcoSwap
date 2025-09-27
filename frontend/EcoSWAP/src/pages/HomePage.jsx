@@ -18,7 +18,7 @@ const HomePage = ({ navigate }) => {
         {/* Welcome Message */}
         <FadeInUp delay={200}>
           <h1 className="text-5xl font-bold mb-6 text-gray-800 tracking-tight">
-            Welcome to EcoSwap
+            Welcome to EcoSWAP
           </h1>
           <p className="text-xl text-gray-600 mb-12 max-w-2xl mx-auto leading-relaxed">
             Your sustainable carbon trading platform for a greener future. Choose your experience below.

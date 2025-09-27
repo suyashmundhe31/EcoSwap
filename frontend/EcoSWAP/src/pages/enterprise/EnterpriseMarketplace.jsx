@@ -6,6 +6,7 @@ import { MARKETPLACE_DATA } from '../../utils/constants';
 
 import solarImage from '../../assets/solar.png';
 import forestImage from '../../assets/tree.png';
+import coinImage from '../../assets/coin.png';
 
 const EnterpriseMarketplace = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,7 +27,7 @@ const EnterpriseMarketplace = () => {
   };
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-6 py-8">
       {/* Page Title */}
       <FadeInUp>
         <h1 className="text-4xl font-bold mb-8 text-gray-900">
@@ -44,13 +45,14 @@ const EnterpriseMarketplace = () => {
       </FadeInUp>
 
       {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredProjects.map((project, index) => (
           <FadeInUp key={project.id} delay={200 + (index * 50)}>
             <ProjectCard 
               project={project} 
               solarImage={solarImage}
               forestImage={forestImage}
+              coinImage={coinImage}
             />
           </FadeInUp>
         ))}
