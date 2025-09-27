@@ -145,26 +145,36 @@ const CarbonCoinMintingSuccess = ({
           {/* Annual Coins */}
           <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-yellow-200">
             <div className="text-4xl font-bold text-yellow-600 mb-2">
-              {carbonCredits.carbon_coins?.annual || carbonCredits.annual_co2_avoided_tonnes} coins
+              {carbonCredits.carbon_coins?.annual || 
+               carbonCredits.annual_co2_avoided_tonnes || 
+               carbonCredits.mintingResult?.carbon_credit_calculations?.annual_carbon_coins || 
+               0} coins
             </div>
             <div className="text-sm font-semibold text-gray-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
               Annual Carbon Coins
             </div>
             <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
-              = {carbonCredits.annual_co2_avoided_tonnes} tons CO₂ avoided per year
+              = {carbonCredits.annual_co2_avoided_tonnes || 
+                 carbonCredits.mintingResult?.carbon_credit_calculations?.annual_carbon_coins || 
+                 0} tons CO₂ avoided per year
             </div>
           </div>
           
           {/* 10-Year Coins */}
           <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-orange-200">
             <div className="text-4xl font-bold text-orange-600 mb-2">
-              {carbonCredits.carbon_coins?.ten_year || (carbonCredits.annual_co2_avoided_tonnes * 10)} coins
+              {carbonCredits.carbon_coins?.ten_year || 
+               (carbonCredits.annual_co2_avoided_tonnes * 10) || 
+               (carbonCredits.mintingResult?.carbon_credit_calculations?.annual_carbon_coins * 10) || 
+               0} coins
             </div>
             <div className="text-sm font-semibold text-gray-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
               10-Year Projection
             </div>
             <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
-              = {(carbonCredits.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided
+              = {((carbonCredits.annual_co2_avoided_tonnes || 
+                  carbonCredits.mintingResult?.carbon_credit_calculations?.annual_carbon_coins || 
+                  0) * 10).toFixed(2)} tons CO₂ avoided
             </div>
           </div>
         </div>

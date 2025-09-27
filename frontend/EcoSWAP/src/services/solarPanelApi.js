@@ -22,7 +22,7 @@ class SolarPanelApiService {
   async handleResponse(response) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
     }
     return response.json();
   }
@@ -102,8 +102,7 @@ class SolarPanelApiService {
     return this.handleResponse(response);
   }
 
-
-  // UPDATED: Calculate solar energy potential using your backend
+  // Calculate solar energy potential using your backend
   async calculateSolarEnergy(latitude, longitude, panelAreaSqm = null) {
     console.log('API Service: Calculating solar energy for:', latitude, longitude);
     
@@ -124,7 +123,7 @@ class SolarPanelApiService {
     return result;
   }
 
-  // NEW: Extract GPS coordinates from photo using OpenAI Vision API
+  // Extract GPS coordinates from photo using OpenAI Vision API
   async extractGpsFromPhoto(photo) {
     console.log('API Service: Extracting GPS from photo:', photo.name);
     
@@ -165,32 +164,149 @@ class SolarPanelApiService {
     return this.handleResponse(response);
   }
 
-  // Mint carbon coins based on solar calculation results
-  async mintCarbonCoins(solarCalculationData) {
-    const formData = new FormData();
-    formData.append('latitude', solarCalculationData.latitude);
-    formData.append('longitude', solarCalculationData.longitude);
-    formData.append('annual_energy_mwh', solarCalculationData.annual_energy_mwh);
-    formData.append('annual_co2_avoided_tonnes', solarCalculationData.annual_co2_avoided_tonnes);
-    formData.append('annual_carbon_credits', solarCalculationData.annual_carbon_credits);
-    formData.append('calculation_method', solarCalculationData.calculation_method);
-    
-    // Add new required parameters for marketplace credits
-    formData.append('issuer_name', solarCalculationData.issuer_name || 'Solar Panel Owner');
-    formData.append('description', solarCalculationData.description || 'Solar panel carbon credits');
-    formData.append('price_per_coin', solarCalculationData.price_per_coin || '');
-    if (solarCalculationData.source_project_id) {
-      formData.append('source_project_id', solarCalculationData.source_project_id);
+  /**
+   * UNIFIED CARBON COIN MINTING METHOD
+   * Mint carbon coins directly using the /solar-panel/mint-coin endpoint
+   * @param {Object|string} coinDataOrName - Either an object with coin data or just the name (for backward compatibility)
+   * @param {number} credits - Number of carbon credits/coins (if first param is string)
+   * @param {string} source - Source type (if first param is string)
+   * @param {string} description - Optional description (if first param is string)
+   * @returns {Promise<Object>} Minting result
+   */
+  async mintCarbonCoins(coinDataOrName, credits = null, source = 'solar_plant', description = null) {
+    try {
+      let coinData;
+      
+      // Handle both old and new calling patterns
+      if (typeof coinDataOrName === 'object') {
+        // New object-based calling pattern
+        coinData = coinDataOrName;
+      } else {
+        // Old parameter-based calling pattern (for backward compatibility)
+        coinData = {
+          name: coinDataOrName,
+          credits: credits,
+          source: source,
+          description: description
+        };
+      }
+
+      console.log('API Service: Minting carbon coins with data:', coinData);
+      
+      const formData = new FormData();
+      formData.append('name', coinData.name);
+      formData.append('credits', coinData.credits.toString());
+      formData.append('source', coinData.source || 'solar_plant');
+      if (coinData.description) {
+        formData.append('description', coinData.description);
+      }
+
+      const response = await fetch(`${this.baseURL}/solar-panel/mint-coin`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await this.handleResponse(response);
+      console.log('API Service: Minting result:', result);
+      return result;
+    } catch (error) {
+      console.error('API Service: Minting error:', error);
+      throw error;
     }
+  }
 
-    const response = await fetch(`${this.baseURL}/solar-panel/mint-carbon-coins`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${getAuthToken()}`,
-      },
-      body: formData,
-    });
+  /**
+   * Mint carbon coins directly using the new mint-coin endpoint
+   * @param {Object} coinData - The coin minting data
+   * @param {string} coinData.name - Name of the coin/project
+   * @param {number} coinData.credits - Number of carbon credits/coins
+   * @param {string} coinData.source - Source type (default: "solar_plant")
+   * @param {string} coinData.description - Optional description
+   * @returns {Promise<Object>} Minting result
+   */
+  async mintCarbonCoinsDirect(coinData) {
+    try {
+      const formData = new FormData();
+      formData.append('name', coinData.name);
+      formData.append('credits', coinData.credits.toString());
+      formData.append('source', coinData.source || 'solar_plant');
+      if (coinData.description) {
+        formData.append('description', coinData.description);
+      }
 
+      const response = await fetch(`${this.baseURL}/solar-panel/mint-coin`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          // Don't set Content-Type for FormData, let browser set it
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Direct minting result:', result);
+      return result;
+    } catch (error) {
+      console.error('Direct minting error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get minted coin information using the GET mint-coin endpoint
+   * @param {Object} options - Query options
+   * @param {string} options.name - Filter by coin name
+   * @param {string} options.source - Filter by source type
+   * @param {number} options.skip - Pagination offset
+   * @param {number} options.limit - Number of items per page
+   * @returns {Promise<Object>} Minted coins information
+   */
+  async getMintCoinInfo(options = {}) {
+    try {
+      const params = new URLSearchParams();
+      
+      if (options.name) params.append('name', options.name);
+      if (options.source) params.append('source', options.source);
+      if (options.skip !== undefined) params.append('skip', options.skip.toString());
+      if (options.limit !== undefined) params.append('limit', options.limit.toString());
+
+      const url = `${this.baseURL}/solar-panel/mint-coin?${params}`;
+      console.log('Fetching mint coin info from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Mint coin info result:', result);
+      return result;
+    } catch (error) {
+      console.error('Get mint coin info error:', error);
+      throw error;
+    }
+  }
+
+  // Get all minted coins
+  async getMintedCoins(skip = 0, limit = 100) {
+    const response = await fetch(`${this.baseURL}/solar-panel/minted-coins?skip=${skip}&limit=${limit}`);
+    return this.handleResponse(response);
+  }
+
+  // Get specific minted coin by ID
+  async getMintedCoin(coinId) {
+    const response = await fetch(`${this.baseURL}/solar-panel/minted-coins/${coinId}`);
     return this.handleResponse(response);
   }
 
@@ -322,7 +438,7 @@ class SolarPanelApiService {
     }
   }
 
-  // NEW: Save analysis results to database
+  // Save analysis results to database
   async saveSolarAnalysisResults(analysisData) {
     console.log('API Service: Saving analysis results:', analysisData);
     
@@ -337,7 +453,7 @@ class SolarPanelApiService {
     return this.handleResponse(response);
   }
 
-  // NEW: Create carbon token
+  // Create carbon token
   async createCarbonToken(tokenData) {
     console.log('API Service: Creating carbon token:', tokenData);
     

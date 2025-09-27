@@ -4,8 +4,11 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from app.database import get_db
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.services.gps_extraction_service import GPSExtractionService
 from app.services.solar_panel_service import SolarPanelService
+from app.services.marketplace_service import MarketplaceService
 from app.models.solar_panel import CarbonToken
 from app.schemas.solar_panel import (
     SolarPanelApplicationCreate,
@@ -16,8 +19,73 @@ from app.schemas.solar_panel import (
     CarbonTokenResponse,
     CarbonTokenList
 )
+from app.schemas.marketplace import MarketplaceCreditCreate, SourceType
 
 router = APIRouter(prefix="/solar-panel", tags=["solar-panel"])
+
+@router.get("/extract-gps")
+async def get_gps_extraction_info():
+    """Get information about GPS extraction service and supported methods"""
+    return {
+        "service_name": "GPS Extraction Service",
+        "description": "Extract GPS coordinates from geotagged photos using AI and EXIF data",
+        "supported_methods": [
+            {
+                "method": "exif",
+                "description": "Extract GPS coordinates from image EXIF metadata",
+                "confidence": "high",
+                "requirements": "Image must have GPS EXIF data"
+            },
+            {
+                "method": "text_extraction",
+                "description": "Extract GPS coordinates from text written in the image using regex patterns",
+                "confidence": "high",
+                "requirements": "Image must have GPS coordinates written as text (e.g., 'Lat 28.586847° Long 77.071348°')"
+            },
+            {
+                "method": "opencv_ocr",
+                "description": "Extract GPS coordinates using OpenCV image processing and OCR for better text detection",
+                "confidence": "high",
+                "requirements": "OpenCV and pytesseract must be installed, image must have GPS coordinates written as text"
+            },
+            {
+                "method": "openai_vision",
+                "description": "Use OpenAI Vision API to analyze image and extract location information",
+                "confidence": "medium",
+                "requirements": "OpenAI API key must be configured"
+            }
+        ],
+        "supported_formats": ["JPEG", "PNG", "TIFF", "WebP"],
+        "max_file_size": "10MB",
+        "api_endpoints": {
+            "post": "/solar-panel/extract-gps",
+            "description": "Upload an image file to extract GPS coordinates"
+        },
+        "response_format": {
+            "success": "boolean",
+            "latitude": "float or null",
+            "longitude": "float or null", 
+            "message": "string",
+            "method": "string (exif|text_extraction|opencv_ocr|openai_vision|error)",
+            "confidence": "string (high|medium|low|none)",
+            "description": "string (additional details about extraction)"
+        },
+        "example_request": {
+            "method": "POST",
+            "url": "/solar-panel/extract-gps",
+            "content_type": "multipart/form-data",
+            "body": "photo: [image file]"
+        },
+        "example_response": {
+            "success": True,
+            "latitude": 28.6139,
+            "longitude": 77.2090,
+            "message": "GPS coordinates extracted from EXIF data",
+            "method": "exif",
+            "confidence": "high",
+            "description": "Coordinates extracted from image metadata"
+        }
+    }
 
 @router.post("/extract-gps")
 async def extract_gps_from_photo(
@@ -410,3 +478,230 @@ async def get_tokens_summary(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving token summary: {str(e)}")
+
+# API 4: Mint Carbon Coins (Last API in Solar Workflow)
+@router.post("/mint-carbon-coins")
+async def mint_solar_carbon_coins(
+    application_id: int = Form(...),
+    issuer_name: str = Form(...),
+    description: Optional[str] = Form(None),
+    price_per_coin: Optional[float] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mint carbon coins for a solar panel application and save to marketplace"""
+    try:
+        service = SolarPanelService(db)
+        
+        # Get the application
+        application = service.get_application(application_id)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Check if analysis exists for this application
+        analysis = service.get_analysis_by_application(application_id)
+        if not analysis:
+            raise HTTPException(status_code=400, detail="Solar analysis must be completed before minting coins")
+        
+        # Extract carbon credits from analysis
+        annual_carbon_coins = analysis.annual_carbon_credits
+        
+        if annual_carbon_coins <= 0:
+            raise HTTPException(status_code=400, detail="No carbon credits calculated for this application")
+        
+        # Create marketplace credit entry
+        marketplace_service = MarketplaceService(db)
+        
+        credit_data = MarketplaceCreditCreate(
+            issuer_name=issuer_name,
+            issuer_id=current_user.id,
+            coins_issued=annual_carbon_coins,
+            source_type=SourceType.SOLAR_PANEL,
+            source_project_id=application_id,
+            description=description or f"Solar panel carbon credits - {application.full_name}",
+            price_per_coin=price_per_coin or 15.0
+        )
+        
+        marketplace_credit = marketplace_service.create_marketplace_credit(credit_data)
+        
+        return {
+            "success": True,
+            "marketplace_credit_id": marketplace_credit.id,
+            "coins_issued": annual_carbon_coins,
+            "issuer_name": issuer_name,
+            "description": marketplace_credit.description,
+            "price_per_coin": marketplace_credit.price_per_coin,
+            "verification_status": marketplace_credit.verification_status.value,
+            "marketplace_info": {
+                "credit_id": marketplace_credit.id,
+                "verification_status": marketplace_credit.verification_status.value,
+                "created_at": marketplace_credit.created_at.isoformat(),
+                "source_type": marketplace_credit.source_type.value
+            },
+            "application_info": {
+                "application_id": application_id,
+                "full_name": application.full_name,
+                "company_name": application.company_name,
+                "annual_mwh": analysis.annual_mwh,
+                "co2_emission_saved": analysis.co2_emission_saved
+            },
+            "message": f"Successfully minted {annual_carbon_coins} carbon coins for solar panel project!"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error minting carbon coins: {str(e)}")
+
+# Simple Mint Coin API - Direct coin minting
+@router.post("/mint-coin")
+async def mint_coin_simple(
+    name: str = Form(...),
+    credits: float = Form(...),
+    source: str = Form(default="solar_plant"),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Simple API to mint carbon coins directly"""
+    try:
+        service = SolarPanelService(db)
+        
+        # Create a simple carbon token
+        token_data = CarbonTokenCreate(
+            application_id=1,  # Default application ID for direct minting
+            name=name,
+            credits=credits
+        )
+        
+        # Create the token
+        token = service.create_carbon_token(token_data)
+        
+        return {
+            "success": True,
+            "id": token.id,
+            "name": token.name,
+            "credits": token.credits,
+            "source": source,
+            "description": description or f"Carbon coins minted for {name}",
+            "tokenized_date": token.tokenized_date.isoformat(),
+            "message": f"Successfully minted {credits} carbon coins for {name}!"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error minting coin: {str(e)}")
+
+@router.get("/mint-coin")
+async def get_mint_coin_info(
+    name: Optional[str] = None,
+    source: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """GET endpoint to retrieve minted coin information with optional filtering"""
+    try:
+        service = SolarPanelService(db)
+        
+        # Get all tokens with optional filtering
+        tokens = service.get_all_tokens(skip, limit)
+        
+        # Apply filters if provided
+        filtered_tokens = []
+        for token in tokens:
+            # Filter by name if provided
+            if name and name.lower() not in token.name.lower():
+                continue
+            
+            # Filter by source if provided (we'll use a default source mapping)
+            if source and source != "solar_plant":  # For now, all tokens are solar_plant
+                continue
+                
+            filtered_tokens.append({
+                "id": token.id,
+                "name": token.name,
+                "credits": token.credits,
+                "source": source or "solar_plant",
+                "description": f"Carbon coins minted for {token.name}",
+                "tokenized_date": token.tokenized_date.isoformat(),
+                "application_id": token.application_id
+            })
+        
+        return {
+            "success": True,
+            "minted_coins": filtered_tokens,
+            "total": len(filtered_tokens),
+            "filters_applied": {
+                "name": name,
+                "source": source,
+                "skip": skip,
+                "limit": limit
+            },
+            "message": f"Retrieved {len(filtered_tokens)} minted coins"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving minted coins: {str(e)}")
+
+# Get all minted coins
+@router.get("/minted-coins")
+async def get_minted_coins(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Get all minted carbon coins"""
+    try:
+        service = SolarPanelService(db)
+        tokens = service.get_all_tokens(skip, limit)
+        
+        # Format response
+        minted_coins = []
+        for token in tokens:
+            minted_coins.append({
+                "id": token.id,
+                "name": token.name,
+                "credits": token.credits,
+                "source": token.source,
+                "tokenized_date": token.tokenized_date.isoformat(),
+                "application_id": token.application_id
+            })
+        
+        return {
+            "success": True,
+            "minted_coins": minted_coins,
+            "total": len(minted_coins),
+            "message": f"Retrieved {len(minted_coins)} minted coins"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving minted coins: {str(e)}")
+
+# Get specific minted coin by ID
+@router.get("/minted-coins/{coin_id}")
+async def get_minted_coin(
+    coin_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a specific minted carbon coin by ID"""
+    try:
+        service = SolarPanelService(db)
+        
+        token = service.get_token(coin_id)
+        if not token:
+            raise HTTPException(status_code=404, detail="Minted coin not found")
+        
+        return {
+            "success": True,
+            "id": token.id,
+            "name": token.name,
+            "credits": token.credits,
+            "source": token.source,
+            "tokenized_date": token.tokenized_date.isoformat(),
+            "application_id": token.application_id,
+            "message": f"Retrieved minted coin: {token.name}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving minted coin: {str(e)}")

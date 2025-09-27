@@ -177,11 +177,11 @@ const ForestationForm = ({ navigate }) => {
       setCarbonCredits(prev => ({
         ...prev,
         mintingResult: result,
-        issueId: result.data?.issue_id
+        issueId: result.marketplace_credit_id || result.data?.issue_id
       }));
       
       setShowMintingSuccess(true);
-      setSuccess(`Successfully minted ${result.data?.carbon_coins?.annual || 0} carbon coins!`);
+      setSuccess(`Successfully minted ${result.carbon_credit_calculations?.annual_carbon_coins || 0} carbon coins!`);
       
     } catch (err) {
       console.error('Minting error:', err);
@@ -453,10 +453,10 @@ const ForestationForm = ({ navigate }) => {
                   ✅ CARBON COINS MINTED SUCCESSFULLY!
                 </h4>
                 <div className="text-2xl font-bold text-green-600 mb-2">
-                  {mintingResult.data?.carbon_coins?.annual || 0} Carbon Coins
+                  {mintingResult.carbon_credit_calculations?.annual_carbon_coins || 0} Carbon Coins
                 </div>
                 <p className="text-sm text-gray-700 mb-2">
-                  Issue ID: {mintingResult.data?.issue_id}
+                  Issue ID: {mintingResult.marketplace_credit_id || mintingResult.data?.issue_id}
                 </p>
                 <button
                   onClick={() => setShowMintingSuccess(true)}
@@ -512,7 +512,7 @@ const ForestationForm = ({ navigate }) => {
                 <p>Submitted: {new Date(applicationResult.created_at).toLocaleDateString()}</p>
                 {mintingResult && (
                   <p className="text-green-600 font-bold mt-2">
-                    Carbon Coins Minted: {mintingResult.data?.carbon_coins?.annual || 0}
+                    Carbon Coins Minted: {mintingResult.carbon_credit_calculations?.annual_carbon_coins || 0}
                   </p>
                 )}
               </div>

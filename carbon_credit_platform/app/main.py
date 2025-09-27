@@ -36,6 +36,9 @@ Base.metadata.create_all(bind=engine)
 # Include the main API router with v1 prefix
 app.include_router(api_router, prefix="/api/v1")
 
+# Include the solar panel router
+app.include_router(solar_panel_router, prefix="/api/v1")
+
 @app.get("/")
 async def root():
     """Welcome endpoint"""

@@ -222,6 +222,175 @@ class ForestationApiService {
       throw error;
     }
   }
+
+  /**
+   * Mint forestation carbon coins directly using the new mint-coin endpoint
+   * @param {Object} coinData - The coin minting data
+   * @param {string} coinData.name - Name of the coin/project
+   * @param {number} coinData.credits - Number of carbon credits/coins
+   * @param {string} coinData.source - Source type (default: "forestation")
+   * @param {string} coinData.description - Optional description
+   * @returns {Promise<Object>} Minting result
+   */
+  async mintCarbonCoinsDirect(coinData) {
+    try {
+      const formData = new FormData();
+      formData.append('name', coinData.name);
+      formData.append('credits', coinData.credits.toString());
+      formData.append('source', coinData.source || 'forestation');
+      if (coinData.description) {
+        formData.append('description', coinData.description);
+      }
+
+      const response = await fetch(`${this.baseURL}/forestation/mint-coin`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          // Don't set Content-Type for FormData, let browser set it
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Direct forestation minting result:', result);
+      return result;
+    } catch (error) {
+      console.error('Direct forestation minting error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get forestation minted coin information using the GET mint-coin endpoint
+   * @param {Object} options - Query options
+   * @param {string} options.name - Filter by coin name
+   * @param {string} options.source - Filter by source type
+   * @param {number} options.skip - Pagination offset
+   * @param {number} options.limit - Number of items per page
+   * @returns {Promise<Object>} Minted coins information
+   */
+  async getMintCoinInfo(options = {}) {
+    try {
+      const params = new URLSearchParams();
+      
+      if (options.name) params.append('name', options.name);
+      if (options.source) params.append('source', options.source);
+      if (options.skip !== undefined) params.append('skip', options.skip.toString());
+      if (options.limit !== undefined) params.append('limit', options.limit.toString());
+
+      const url = `${this.baseURL}/forestation/mint-coin?${params}`;
+      console.log('Fetching forestation mint coin info from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Forestation mint coin info result:', result);
+      return result;
+    } catch (error) {
+      console.error('Get forestation mint coin info error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save forestation analysis results to database
+   * @param {Object} analysisData - Analysis data
+   * @param {number} analysisData.application_id - Application ID
+   * @param {number} analysisData.latitude - Latitude
+   * @param {number} analysisData.longitude - Longitude
+   * @param {number} analysisData.area_hectares - Area in hectares
+   * @param {number} analysisData.co2_sequestration_rate - CO2 sequestration rate
+   * @param {number} analysisData.annual_carbon_credits - Annual carbon credits
+   * @param {string} analysisData.forest_type - Forest type
+   * @param {number} analysisData.tree_count - Tree count
+   * @param {number} analysisData.vegetation_coverage - Vegetation coverage percentage
+   * @returns {Promise<Object>} Analysis result
+   */
+  async saveAnalysisResults(analysisData) {
+    try {
+      const formData = new FormData();
+      formData.append('application_id', analysisData.application_id.toString());
+      formData.append('latitude', analysisData.latitude.toString());
+      formData.append('longitude', analysisData.longitude.toString());
+      formData.append('area_hectares', analysisData.area_hectares.toString());
+      formData.append('co2_sequestration_rate', analysisData.co2_sequestration_rate.toString());
+      formData.append('annual_carbon_credits', analysisData.annual_carbon_credits.toString());
+      formData.append('forest_type', analysisData.forest_type);
+      formData.append('tree_count', analysisData.tree_count.toString());
+      formData.append('vegetation_coverage', analysisData.vegetation_coverage.toString());
+
+      const response = await fetch(`${this.baseURL}/forestation/analysis`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Forestation analysis save result:', result);
+      return result;
+    } catch (error) {
+      console.error('Save forestation analysis error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get forestation analysis results with optional filtering
+   * @param {Object} options - Query options
+   * @param {number} options.application_id - Filter by application ID
+   * @param {number} options.skip - Pagination offset
+   * @param {number} options.limit - Number of items per page
+   * @returns {Promise<Object>} Analysis results
+   */
+  async getAnalysisResults(options = {}) {
+    try {
+      const params = new URLSearchParams();
+      
+      if (options.application_id !== undefined) params.append('application_id', options.application_id.toString());
+      if (options.skip !== undefined) params.append('skip', options.skip.toString());
+      if (options.limit !== undefined) params.append('limit', options.limit.toString());
+
+      const url = `${this.baseURL}/forestation/analysis?${params}`;
+      console.log('Fetching forestation analysis results from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Forestation analysis results:', result);
+      return result;
+    } catch (error) {
+      console.error('Get forestation analysis results error:', error);
+      throw error;
+    }
+  }
 }
 
 // Create and export a singleton instance

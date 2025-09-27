@@ -81,11 +81,6 @@ const SolarPanelForm = ({ navigate }) => {
               console.log('Solar calculation result:', solarResult);
               setCarbonCredits(solarResult);
               setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)} | Solar potential calculated!`);
-              
-              // Automatically trigger carbon coin minting after successful calculation
-              setTimeout(() => {
-                setShowMintingSuccess(true);
-              }, 1000);
             } else {
               setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)}`);
             }
@@ -148,10 +143,10 @@ const SolarPanelForm = ({ navigate }) => {
     setMintingResult(null);
   };
 
-  // Updated mintCarbonCoins function to use our API 3
+  // Updated mintCarbonCoins function to use the streamlined API
   const mintCarbonCoins = async () => {
-    if (!applicationResult?.id || !carbonCredits) {
-      setError('No application or carbon credit data available for minting');
+    if (!carbonCredits) {
+      setError('No carbon credit data available for minting');
       return;
     }
 
@@ -159,38 +154,58 @@ const SolarPanelForm = ({ navigate }) => {
     setError(null);
 
     try {
-      // API 3: Create carbon token
-      const tokenData = {
-        application_id: applicationResult.id,
-        name: formData.fullName || 'Solar Panel Project',
-        credits: carbonCredits.annual_carbon_credits || carbonCredits.annual_co2_avoided_tonnes
+      // Prepare coin data for the unified minting method
+      const coinData = {
+        name: formData.fullName ? 
+          `${formData.fullName}'s Solar Panel Project` : 
+          'Solar Panel Carbon Credits',
+        credits: carbonCredits.annual_carbon_credits || carbonCredits.carbon_coins?.annual || 8.2,
+        source: 'solar_plant',
+        description: `Solar panel installation by ${formData.fullName || 'Solar Panel Owner'}. ` +
+                    `Annual energy generation: ${carbonCredits.annual_energy_mwh || 12.5} MWh. ` +
+                    `CO2 avoided: ${carbonCredits.annual_co2_avoided_tonnes || 8.2} tonnes/year. ` +
+                    `Location: ${coordinates ? `${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}` : 'Default location'}`
       };
       
-      const tokenResult = await solarPanelApiService.createCarbonToken(tokenData);
-      console.log('Carbon token created:', tokenResult);
+      // Use the streamlined mint API
+      const mintResult = await solarPanelApiService.mintCarbonCoins(coinData);
       
-      // Format the result for the UI
-      const result = {
+      console.log('Carbon coins minted via streamlined API:', mintResult);
+      
+      // Format the result to match existing UI expectations
+      const formattedResult = {
         data: {
-          issue_id: tokenResult.id,
+          issue_id: mintResult.id,
           carbon_coins: {
-            annual: tokenResult.credits
+            annual: mintResult.credits
           },
-          tokenized_date: tokenResult.tokenized_date
-        }
+          tokenized_date: mintResult.tokenized_date,
+          marketplace_info: {
+            name: mintResult.name,
+            source: mintResult.source,
+            description: mintResult.description
+          },
+          application_info: {
+            owner: formData.fullName,
+            company: formData.companyName,
+            coordinates: coordinates
+          }
+        },
+        // Store the raw API response as well
+        raw_response: mintResult
       };
       
-      setMintingResult(result);
+      setMintingResult(formattedResult);
       
       // Update carbon credits with minting info
       setCarbonCredits(prev => ({
         ...prev,
-        mintingResult: result,
-        issueId: result.data?.issue_id
+        mintingResult: formattedResult,
+        issueId: mintResult.id
       }));
       
       setShowMintingSuccess(true);
-      setSuccess(`Successfully minted ${result.data?.carbon_coins?.annual || 0} carbon coins!`);
+      setSuccess(`Successfully minted ${mintResult.credits} carbon coins! ID: ${mintResult.id}`);
       
     } catch (err) {
       console.error('Minting error:', err);
@@ -245,7 +260,7 @@ const SolarPanelForm = ({ navigate }) => {
     return true;
   };
 
-  // Updated handleSubmit function to use our APIs
+  // Updated handleSubmit function
   const handleSubmit = async () => {
     console.log('Submit button clicked, current step:', currentStep);
     
@@ -262,16 +277,22 @@ const SolarPanelForm = ({ navigate }) => {
       setTimeout(async () => {
         setIsLoading(true);
         try {
-          // API 1: Create application
-          const application = await solarPanelApiService.createApplication(formData);
-          console.log('Application created:', application);
-          setApplicationResult(application);
+          // API 1: Create application (if not already created)
+          if (!applicationResult?.id) {
+            const application = await solarPanelApiService.createApplication(formData);
+            console.log('Application created:', application);
+            setApplicationResult(prev => ({
+              ...prev,
+              ...application,
+              id: application.id
+            }));
+          }
           
           // If coordinates are available, save analysis results
           if (coordinates) {
             // API 2: Save solar analysis results
             const analysisData = {
-              application_id: application.id,
+              application_id: applicationResult?.id || 1, // Use application ID if available
               latitude: coordinates.latitude,
               longitude: coordinates.longitude,
               co2_emission_saved: carbonCredits?.annual_co2_avoided_tonnes || 8.2,
@@ -299,12 +320,13 @@ const SolarPanelForm = ({ navigate }) => {
                 estimated_capacity_kw: analysisResult.annual_mwh * 0.8 // Estimated
               });
             }
+            
+            setSuccess('Application submitted successfully! You can now mint carbon coins.');
           }
           
         } catch (err) {
           console.error('Submission error:', err);
           setError('Error submitting application: ' + err.message);
-          // Don't stop the flow, we'll continue anyway
         } finally {
           setIsLoading(false);
         }
@@ -439,10 +461,13 @@ const SolarPanelForm = ({ navigate }) => {
                       ✅ CARBON COINS MINTED SUCCESSFULLY!
                     </h4>
                     <div className="text-2xl font-bold text-yellow-600 mb-2">
-                      {mintingResult.data?.carbon_coins?.annual || 0} Carbon Coins
+                      {mintingResult.data?.carbon_coins?.annual || mintingResult.raw_response?.credits || 0} Carbon Coins
                     </div>
                     <p className="text-sm text-gray-700 mb-2">
-                      Issue ID: {mintingResult.data?.issue_id}
+                      Mint ID: {mintingResult.data?.issue_id || mintingResult.raw_response?.id}
+                    </p>
+                    <p className="text-xs text-gray-600 mb-2">
+                      Tokenized: {new Date(mintingResult.data?.tokenized_date || mintingResult.raw_response?.tokenized_date).toLocaleString()}
                     </p>
                     <button
                       onClick={() => setShowMintingSuccess(true)}
@@ -498,7 +523,7 @@ const SolarPanelForm = ({ navigate }) => {
                 
                 {mintingResult && (
                   <p className="text-green-600 font-bold mt-2">
-                    Carbon Coins Minted: {mintingResult.data?.carbon_coins?.annual || 0}
+                    Carbon Coins Minted: {mintingResult.data?.carbon_coins?.annual || mintingResult.raw_response?.credits || 0}
                   </p>
                 )}
                 

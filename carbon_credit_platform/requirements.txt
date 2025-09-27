@@ -14,3 +14,4 @@ opencv-python==4.8.1.78
 numpy==1.24.3
 aiohttp==3.9.1
 exifread==3.0.0
+pytesseract==0.3.10
