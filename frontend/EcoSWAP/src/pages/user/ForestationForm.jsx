@@ -33,6 +33,8 @@ const ForestationForm = ({ navigate }) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [applicationResult, setApplicationResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const validateForm = () => {
     if (!formData.fullName.trim()) {
@@ -85,6 +87,39 @@ const ForestationForm = ({ navigate }) => {
     }
     
     setIsLoading(false);
+  };
+
+  const performForestAnalysis = async () => {
+    if (!applicationResult?.id) {
+      setError('No application found to analyze');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/forestation/applications/${applicationResult.id}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setAnalysisResult(result);
+        setSuccess('Forest analysis completed successfully!');
+      } else {
+        const errorData = await response.json();
+        setError(`Forest analysis failed: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setError(`Error performing forest analysis: ${error.message}`);
+    }
+
+    setIsAnalyzing(false);
   };
 
   const handleSubmit = () => {
@@ -236,6 +271,123 @@ const ForestationForm = ({ navigate }) => {
                 </div>
               </div>
             </div>
+
+            {/* Forest Analysis Section */}
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border-2 border-blue-300">
+              <div className="text-center mb-4">
+                <h4 className="text-lg font-bold text-blue-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                  🤖 AI-POWERED FOREST ANALYSIS
+                </h4>
+                <p className="text-sm text-blue-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                  Advanced satellite imagery analysis with computer vision tree counting
+                </p>
+              </div>
+              
+              <div className="text-center">
+                <button
+                  onClick={performForestAnalysis}
+                  disabled={isAnalyzing}
+                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                    isAnalyzing 
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {isAnalyzing ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Analyzing Forest...</span>
+                    </div>
+                  ) : (
+                    '🌲 Analyze Forest & Calculate Carbon Credits'
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Analysis Results Display */}
+            {analysisResult && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-300">
+                <h4 className="text-lg font-bold text-green-800 mb-4 text-center" style={{fontFamily: 'Space Mono, monospace'}}>
+                  📊 FOREST ANALYSIS RESULTS
+                </h4>
+                
+                {/* Computer Vision Analysis */}
+                {analysisResult.computer_vision_analysis && (
+                  <div className="mb-4 p-3 bg-white rounded-lg">
+                    <h5 className="font-bold text-gray-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      🔬 Computer Vision Analysis
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="font-semibold">Vegetation Coverage:</span> {analysisResult.computer_vision_analysis.total_vegetation_coverage}%
+                      </div>
+                      <div>
+                        <span className="font-semibold">Total Area:</span> {analysisResult.computer_vision_analysis.total_vegetation_area_sqm} m²
+                      </div>
+                      <div>
+                        <span className="font-semibold">Tree Count:</span> {analysisResult.computer_vision_analysis.estimated_tree_count}
+                      </div>
+                      <div>
+                        <span className="font-semibold">Confidence:</span> {analysisResult.computer_vision_analysis.analysis_confidence}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Carbon Credit Calculations */}
+                {analysisResult.carbon_credit_calculations && (
+                  <div className="mb-4 p-3 bg-white rounded-lg">
+                    <h5 className="font-bold text-gray-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      💰 Carbon Credit Calculations
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="font-semibold">Forest Type:</span> {analysisResult.carbon_credit_calculations.forest_type}
+                      </div>
+                      <div>
+                        <span className="font-semibold">Forest Area:</span> {analysisResult.carbon_credit_calculations.total_forest_area_ha} ha
+                      </div>
+                      <div>
+                        <span className="font-semibold">Annual CO₂:</span> {analysisResult.carbon_credit_calculations.annual_sequestration_tonnes_co2} tons
+                      </div>
+                      <div>
+                        <span className="font-semibold">Annual Coins:</span> {analysisResult.carbon_credit_calculations.annual_carbon_coins}
+                      </div>
+                      <div>
+                        <span className="font-semibold">10-Year Coins:</span> {analysisResult.carbon_credit_calculations.ten_year_carbon_coins}
+                      </div>
+                      <div>
+                        <span className="font-semibold">Health Adjusted:</span> {analysisResult.carbon_credit_calculations.health_adjusted_annual_coins}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Weather Data */}
+                {analysisResult.weather_data && !analysisResult.weather_data.error && (
+                  <div className="mb-4 p-3 bg-white rounded-lg">
+                    <h5 className="font-bold text-gray-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      🌡️ Current Weather Conditions
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="font-semibold">Temperature:</span> {analysisResult.weather_data.temperature}°C
+                      </div>
+                      <div>
+                        <span className="font-semibold">Humidity:</span> {analysisResult.weather_data.humidity}%
+                      </div>
+                      <div>
+                        <span className="font-semibold">Cloud Cover:</span> {analysisResult.weather_data.cloud_cover}%
+                      </div>
+                      <div>
+                        <span className="font-semibold">Wind Speed:</span> {analysisResult.weather_data.wind_speed} km/h
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 text-center">
               <button

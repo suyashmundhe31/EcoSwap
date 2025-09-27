@@ -317,19 +317,79 @@ async def calculate_forestation_carbon_credits(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating forestation carbon credits: {str(e)}")
 
+@router.post("/applications/{application_id}/analyze")
+async def perform_forest_analysis(
+    application_id: int,
+    db: Session = Depends(get_db)
+):
+    """Perform complete forest analysis with satellite imagery and carbon credit calculation"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        result = await service.perform_complete_forest_analysis(application_id, user_id)
+        
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Forest analysis failed: {str(e)}")
+
+@router.post("/applications/{application_id}/calculate-carbon-credits")
+async def calculate_application_carbon_credits(
+    application_id: int,
+    db: Session = Depends(get_db)
+):
+    """Calculate carbon credits for an approved forestation application"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        result = service.calculate_carbon_credits(application_id, user_id)
+        
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Carbon credit calculation failed: {str(e)}")
+
 @router.get("/")
 async def forestation_info():
     """Get information about the forestation module"""
     return {
         "module": "forestation",
-        "description": "Carbon credit platform forestation application management",
-        "version": "1.0.0",
+        "description": "Advanced forest carbon credit platform with AI-powered analysis",
+        "version": "2.0.0",
         "features": [
             "Application submission",
             "Document upload",
-            "Geotag validation",
+            "Geotag validation with OpenAI Vision API",
             "Application tracking",
             "Admin management",
-            "Carbon credit calculation (1 ton CO2 = 1 carbon coin)"
+            "Advanced forest analysis with satellite imagery",
+            "Computer vision tree counting and vegetation analysis",
+            "Real-time weather data integration",
+            "IPCC-compliant carbon credit calculation",
+            "Carbon coin minting (1 ton CO2 = 1 carbon coin)",
+            "Forest health monitoring with IoT data simulation",
+            "Complete forest analysis with satellite imagery"
+        ],
+        "analysis_capabilities": [
+            "Satellite imagery download and analysis",
+            "Computer vision vegetation detection",
+            "Individual tree counting using contour detection",
+            "Forest type classification (tropical/temperate/boreal)",
+            "Carbon sequestration rate calculation",
+            "Real-time weather data integration",
+            "Forest health monitoring simulation",
+            "Carbon credit and coin calculation"
         ]
     }

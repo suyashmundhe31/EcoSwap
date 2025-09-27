@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import users, credits, projects, bounties, solar_panel, forestation, solar_analysis
+from app.api.v1 import users, credits, projects, bounties, solar_panel, forestation, solar_analysis, marketplace
 
 api_router = APIRouter()
 
@@ -11,3 +11,4 @@ api_router.include_router(bounties.router)
 api_router.include_router(solar_panel.router)
 api_router.include_router(forestation.router)
 api_router.include_router(solar_analysis.router)
+api_router.include_router(marketplace.router)
