@@ -297,6 +297,26 @@ async def forestation_health_check():
         ]
     }
 
+@router.post("/calculate-carbon-credits")
+async def calculate_forestation_carbon_credits(
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    area_hectares: float = Form(1.0),
+    db: Session = Depends(get_db)
+):
+    """Calculate carbon credits for forestation projects - 1 ton CO2 = 1 carbon coin"""
+    try:
+        service = ForestationService(db)
+        result = service.calculate_forestation_carbon_credits(
+            latitude=latitude,
+            longitude=longitude,
+            area_hectares=area_hectares
+        )
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating forestation carbon credits: {str(e)}")
+
 @router.get("/")
 async def forestation_info():
     """Get information about the forestation module"""
@@ -309,6 +329,7 @@ async def forestation_info():
             "Document upload",
             "Geotag validation",
             "Application tracking",
-            "Admin management"
+            "Admin management",
+            "Carbon credit calculation (1 ton CO2 = 1 carbon coin)"
         ]
     }

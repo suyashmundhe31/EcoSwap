@@ -37,3 +37,8 @@ class SolarPanelApplication(Base):
     
     # Relationships
     user = relationship("User", back_populates="solar_panel_applications")
+    
+    # These columns are commented out as they don't exist in the database yet
+    # carbon_credits_data = Column(Text, nullable=True)  # JSON storage for detailed calculations
+    # carbon_coins_issued = Column(Float, default=0)  # Number of carbon coins issued
+    # calculation_date = Column(DateTime(timezone=True), nullable=True)

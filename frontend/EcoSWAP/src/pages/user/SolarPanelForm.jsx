@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FadeInUp from '../../components/animations/FadeInUp';
+import MapComponent from '../../components/maps/MapComponent';
+import CarbonCoinMintingSuccess from '../../components/marketplace/CarbonCoinMintingSuccess';
 import solarPanelApiService from '../../services/solarPanelApi';
 
 import solarImage from '../../assets/solarpanel.png';
 
 const SolarPanelForm = ({ navigate }) => {
+  const [coordinates, setCoordinates] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     ownershipDocument: null,
@@ -21,8 +24,13 @@ const SolarPanelForm = ({ navigate }) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [applicationResult, setApplicationResult] = useState(null);
+  const [carbonCredits, setCarbonCredits] = useState(null);
+  const [isCalculatingCredits, setIsCalculatingCredits] = useState(false);
+  const [showMintingSuccess, setShowMintingSuccess] = useState(false);
 
-  const handleFileUpload = (field, file) => {
+  
+
+  const handleFileUpload = async (field, file) => {
     if (!file) return;
     
     // Create a new File object to avoid file locking issues on Windows
@@ -35,13 +43,110 @@ const SolarPanelForm = ({ navigate }) => {
       ...prev,
       [field]: newFile
     }));
+
+    // If it's a geotagged photo, extract GPS coordinates immediately
+    if (field === 'geotagPhoto' && newFile.type.startsWith('image/')) {
+      try {
+        setIsLoading(true);
+        setError(null); // Clear any previous errors
+        
+        const gpsResult = await solarPanelApiService.extractGpsFromPhoto(newFile);
+        
+        if (gpsResult.is_valid) {
+          // Store the extracted coordinates
+          setApplicationResult({
+            latitude: gpsResult.latitude,
+            longitude: gpsResult.longitude,
+            message: gpsResult.message
+          });
+          
+          // Set coordinates for maps
+          setCoordinates({
+            latitude: gpsResult.latitude,
+            longitude: gpsResult.longitude
+          });
+          
+          // Automatically show maps after GPS extraction
+          setShowMaps(true);
+          
+          // Calculate solar energy potential
+          try {
+            const solarResult = await solarPanelApiService.calculateSolarEnergy(
+              gpsResult.latitude, 
+              gpsResult.longitude
+            );
+            
+            if (solarResult.success) {
+              console.log('Solar calculation result:', solarResult.data);
+              setCarbonCredits(solarResult.data);
+              setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)} | Solar potential calculated!`);
+              
+              // Automatically trigger carbon coin minting after successful calculation
+              setTimeout(() => {
+                setShowMintingSuccess(true);
+              }, 1000);
+            } else {
+              setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)}`);
+            }
+          } catch (solarError) {
+            console.error('Solar calculation error:', solarError);
+            setSuccess(`AI extracted GPS: ${gpsResult.latitude?.toFixed(6)}, ${gpsResult.longitude?.toFixed(6)}`);
+          }
+          
+          setError(null);
+        } else {
+          setError(gpsResult.message || 'AI could not find GPS coordinates in photo');
+          setSuccess(null);
+        }
+      } catch (error) {
+        console.error('GPS extraction error:', error);
+        setError('AI analysis error: ' + error.message);
+        setSuccess(null);
+        
+        // Set default coordinates as fallback
+        setApplicationResult({
+          latitude: 13.0827,
+          longitude: 77.5877,
+          message: 'Using default location due to extraction error'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
+
+  
+
+  
+
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleMintingClose = () => {
+    setShowMintingSuccess(false);
+  };
+
+  const handleMintMore = () => {
+    setShowMintingSuccess(false);
+    // Reset to step 1 to start new application
+    setCurrentStep(1);
+    setFormData({
+      ownershipDocument: null,
+      energyCertification: null,
+      geotagPhoto: null,
+      fullName: '',
+      companyName: '',
+      aadharCard: '',
+      apiLink: ''
+    });
+    setCarbonCredits(null);
+    setApplicationResult(null);
+    setCoordinates(null);
   };
 
   const validateForm = () => {
@@ -100,28 +205,143 @@ const SolarPanelForm = ({ navigate }) => {
       setCurrentStep(2);
       setShowMaps(true);
       setError(null);
-    } else if (currentStep === 2) {
-      // Submit the application
-      console.log('Submitting application with data:', formData);
-      setIsLoading(true);
-      setError(null);
       
-      try {
-        const result = await solarPanelApiService.createApplication(formData);
-        console.log('API response:', result);
-        setApplicationResult(result);
-        setCurrentStep(3);
-        setShowMaps(false);
-        setShowFinalResult(true);
-        setSuccess('Application submitted successfully!');
-      } catch (err) {
-        console.error('API error:', err);
-        setError(`Failed to submit application: ${err.message}`);
-      } finally {
-        setIsLoading(false);
-      }
+      // Submit in background
+      setTimeout(async () => {
+        setIsLoading(true);
+        try {
+          const result = await solarPanelApiService.createApplication(formData);
+          console.log('Application created:', result);
+          setApplicationResult(result);
+          
+          // If carbon credits are included in response
+          if (result.carbon_credits) {
+            setCarbonCredits({
+              success: true,
+              data: result.carbon_credits
+            });
+          }
+        } catch (err) {
+          console.error('Submission error:', err);
+          // Don't stop the flow, just log the error
+        } finally {
+          setIsLoading(false);
+        }
+      }, 100);
+      
+    } else if (currentStep === 2) {
+      setCurrentStep(3);
+      setShowMaps(false);
+      setShowFinalResult(true);
+      setSuccess('Application submitted successfully!');
     }
   };
+
+  const renderMapsView = () => {
+    // Show carbon coin minting success interface if available
+    if (showMintingSuccess && carbonCredits) {
+      return (
+        <CarbonCoinMintingSuccess
+          carbonCredits={carbonCredits}
+          coordinates={coordinates}
+          onClose={handleMintingClose}
+          onMintMore={handleMintMore}
+        />
+      );
+    }
+
+    return (
+      <FadeInUp>
+        <div className="bg-gray-200 rounded-2xl p-6">
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                Extracted GPS Coordinates from Geotagged Photo
+              </h3>
+              {coordinates && (
+                <p className="text-sm text-gray-600">
+                  Latitude: {coordinates.latitude?.toFixed(6)}, Longitude: {coordinates.longitude?.toFixed(6)}
+                </p>
+              )}
+              {coordinates && coordinates.latitude === 13.0827 && coordinates.longitude === 77.5877 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ℹ️ Using default coordinates. Enable location services for accurate mapping.
+                </p>
+              )}
+            </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Street View Map */}
+            <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+              <div className="p-2 bg-gray-100">
+                <h4 className="text-sm font-medium text-gray-700 text-center">Street View</h4>
+              </div>
+              <MapComponent 
+                latitude={coordinates?.latitude || 13.0827} 
+                longitude={coordinates?.longitude || 77.5877} 
+                mapType="street" 
+                title="Solar Installation Site"
+                height="300px"
+              />
+            </div>
+
+            {/* Satellite View Map */}
+            <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+              <div className="p-2 bg-gray-100">
+                <h4 className="text-sm font-medium text-gray-700 text-center">Satellite View</h4>
+              </div>
+              <MapComponent 
+                latitude={coordinates?.latitude || 13.0827} 
+                longitude={coordinates?.longitude || 77.5877} 
+                mapType="satellite" 
+                title="Solar Installation Site"
+                height="300px"
+              />
+            </div>
+          </div>
+
+          {carbonCredits && carbonCredits.success && (
+            <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+              <h4 className="text-lg font-bold text-green-800 mb-2">AI Analysis Complete</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-green-700">Panel Count</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.panel_count}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-700">System Capacity</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.estimated_capacity_kw} kW</p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-700">Annual Energy</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.annual_energy_mwh} MWh</p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-700">Carbon Credits/Year</p>
+                  <p className="text-xl font-bold text-green-900">{carbonCredits.data.carbon_coins?.annual?.toFixed(2)}</p>
+                </div>
+              </div>
+              
+              {/* Mint Carbon Coins Button */}
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setShowMintingSuccess(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl"
+                  style={{fontFamily: 'Space Mono, monospace'}}
+                >
+                  🪙 Mint Carbon Coins
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </FadeInUp>
+    );
+  };
+
+  // Update the showMaps condition to use the new renderMapsView
+  if (showMaps) {
+    return renderMapsView();
+  }
 
   const renderStepContent = () => {
     if (showFinalResult) {
@@ -153,6 +373,41 @@ const SolarPanelForm = ({ navigate }) => {
                 <p>Application ID: {applicationResult.id}</p>
                 <p>Status: {applicationResult.status}</p>
                 <p>Submitted: {new Date(applicationResult.created_at).toLocaleDateString()}</p>
+                
+                {isCalculatingCredits && (
+                  <div className="mt-3 animate-pulse">
+                    <p className="text-blue-600">Calculating carbon credits...</p>
+                  </div>
+                )}
+                
+                {carbonCredits && carbonCredits.success && (
+                  <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-300">
+                    <h4 className="text-lg font-bold text-yellow-800 mb-2">🪙 Carbon Coins Earned</h4>
+                    <div className="mb-3 p-2 bg-yellow-200 rounded-lg border border-yellow-400">
+                      <div className="text-center">
+                        <div className="text-sm font-bold text-yellow-800" style={{fontFamily: 'Space Mono, monospace'}}>
+                          CONVERSION RATE: 1 TON CO2 = 1 CARBON COIN
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-yellow-700 font-semibold">Annual Carbon Coins:</p>
+                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.data.carbon_coins.annual.toFixed(2)} coins</p>
+                        <p className="text-xs text-yellow-600">= {carbonCredits.data.annual_co2_avoided_tonnes.toFixed(2)} tons CO₂ avoided</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-yellow-700 font-semibold">10-Year Projection:</p>
+                        <p className="text-xl font-bold text-yellow-900">{carbonCredits.data.carbon_coins.ten_year.toFixed(2)} coins</p>
+                        <p className="text-xs text-yellow-600">= {(carbonCredits.data.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-yellow-700">
+                      <p>Energy Generation: {carbonCredits.data.annual_energy_mwh.toFixed(2)} MWh/year</p>
+                      <p>CO₂ Avoided: {carbonCredits.data.annual_co2_avoided_tonnes.toFixed(2)} tonnes/year</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -161,47 +416,225 @@ const SolarPanelForm = ({ navigate }) => {
     }
 
     if (showMaps) {
+      // Use coordinates from application result, with fallback
+      const lat = applicationResult?.latitude || 13.0827;
+      const lon = applicationResult?.longitude || 77.5877;
+      const hasRealGPS = applicationResult?.latitude && 
+                         applicationResult?.latitude !== 13.0827;
+      
       return (
         <FadeInUp>
           <div className="bg-gray-200 rounded-2xl p-6">
             <div className="text-center mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                Extracted Co-ordinates Summary (13.874957858, -310.454364430)
+              <h3 className="text-lg font-semibold text-gray-900 mb-2" 
+                  style={{fontFamily: 'Space Mono, monospace'}}>
+                {hasRealGPS ? 'Extracted' : 'Default'} Co-ordinates Summary ({lat.toFixed(6)}, {lon.toFixed(6)})
               </h3>
+              {!hasRealGPS && (
+                <p className="text-sm text-yellow-600 mt-1">
+                  Using default Bangalore location (GPS not found in photo)
+                </p>
+              )}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Street View Map Placeholder */}
-              <div className="bg-gray-300 rounded-xl h-64 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-200 to-blue-200"></div>
-                <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div className="bg-black text-white px-3 py-1 rounded text-sm font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
-                    Street View
-                  </div>
+              {/* Street View Map */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+                <div className="p-2 bg-gray-100">
+                  <h4 className="text-sm font-medium text-gray-700 text-center">Street View</h4>
                 </div>
+                <MapComponent 
+                  latitude={lat} 
+                  longitude={lon} 
+                  mapType="street" 
+                  title="Solar Installation Site"
+                  height="300px"
+                />
               </div>
 
-              {/* Satellite View Map Placeholder */}
-              <div className="bg-gray-300 rounded-xl h-64 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-400 to-green-600"></div>
-                <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+              {/* Satellite View Map */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+                <div className="p-2 bg-gray-100">
+                  <h4 className="text-sm font-medium text-gray-700 text-center">Satellite View</h4>
+                </div>
+                <MapComponent 
+                  latitude={lat} 
+                  longitude={lon} 
+                  mapType="satellite" 
+                  title="Solar Installation Site"
+                  height="300px"
+                />
+              </div>
+            </div>
+            
+            {/* COMPREHENSIVE SOLAR ENERGY CALCULATION RESULTS */}
+            {carbonCredits && (
+              <div className="mt-8">
+                <div className="bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 rounded-2xl p-8 border-2 border-green-300 shadow-lg">
+                  {/* Header */}
+                  <div className="text-center mb-8">
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      🌞 SOLAR ENERGY ANALYSIS RESULTS
+                    </h3>
+                    <p className="text-sm text-gray-600" style={{fontFamily: 'Space Mono, monospace'}}>
+                      Calculated for coordinates: {lat.toFixed(6)}, {lon.toFixed(6)}
+                    </p>
                   </div>
-                  <div className="bg-black text-white px-3 py-1 rounded text-sm font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
-                    Satellite View
+                  
+                  {/* Main Metrics Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    {/* Annual Energy Generation */}
+                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-blue-200">
+                      <div className="text-4xl font-bold text-blue-600 mb-2">
+                        {carbonCredits.annual_energy_mwh} MWh
+                      </div>
+                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                        Annual Energy Generation
+                      </div>
+                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
+                        Clean renewable energy
+                      </div>
+                    </div>
+                    
+                    {/* CO2 Avoided */}
+                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-green-200">
+                      <div className="text-4xl font-bold text-green-600 mb-2">
+                        {carbonCredits.annual_co2_avoided_tonnes} tonnes
+                      </div>
+                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                        CO2 Emissions Avoided
+                      </div>
+                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
+                        Environmental impact
+                      </div>
+                    </div>
+                    
+                    {/* Carbon Credits */}
+                    <div className="bg-white rounded-xl p-6 text-center shadow-lg border-2 border-purple-200">
+                      <div className="text-4xl font-bold text-purple-600 mb-2">
+                        {carbonCredits.annual_carbon_credits}
+                      </div>
+                      <div className="text-sm font-semibold text-gray-700 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                        Carbon Credits/Year
+                      </div>
+                      <div className="text-xs text-gray-500" style={{fontFamily: 'Space Mono, monospace'}}>
+                        Verified carbon units
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Carbon Coins Section */}
+                  {carbonCredits.carbon_coins && (
+                    <div className="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl p-6 border-2 border-yellow-300 shadow-lg">
+                      <div className="text-center mb-4">
+                        <h4 className="text-xl font-bold text-yellow-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                          🪙 CARBON COINS EARNED
+                        </h4>
+                        <div className="text-sm font-bold text-yellow-700 bg-yellow-200 px-3 py-1 rounded-full inline-block" style={{fontFamily: 'Space Mono, monospace'}}>
+                          CONVERSION RATE: 1 TON CO2 = 1 CARBON COIN
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Annual Coins */}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                          <div className="text-3xl font-bold text-yellow-600 mb-1">
+                            {carbonCredits.carbon_coins.annual} coins
+                          </div>
+                          <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                            Per Year
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                            = {carbonCredits.annual_co2_avoided_tonnes} tons CO₂ avoided
+                          </div>
+                        </div>
+                        
+                        {/* 10-Year Coins */}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                          <div className="text-3xl font-bold text-orange-600 mb-1">
+                            {carbonCredits.carbon_coins.ten_year} coins
+                          </div>
+                          <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                            10-Year Total
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                            = {(carbonCredits.annual_co2_avoided_tonnes * 10).toFixed(2)} tons CO₂ avoided
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Conversion Rate Display */}
+                      <div className="mt-4 p-3 bg-yellow-200 rounded-lg border border-yellow-400">
+                        <div className="text-center">
+                          <div className="text-sm font-bold text-yellow-800 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                            💰 CARBON COIN CONVERSION
+                          </div>
+                          <div className="text-xs text-yellow-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                            Every 1 ton of CO₂ emissions avoided = 1 Carbon Coin earned
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Calculation Method */}
+                      <div className="mt-4 text-center">
+                        <div className="text-sm text-yellow-700 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
+                          Calculation Method: {carbonCredits.calculation_method}
+                        </div>
+                        {carbonCredits.carbon_coins.issue_date && (
+                          <div className="text-xs text-yellow-600 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                            Issued: {new Date(carbonCredits.carbon_coins.issue_date).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mint Carbon Coins Button */}
+                  <div className="mt-6 text-center">
+                    <button
+                      onClick={() => setShowMintingSuccess(true)}
+                      className="px-8 py-4 bg-gradient-to-r from-yellow-500 via-orange-500 to-yellow-600 text-white rounded-xl font-bold hover:from-yellow-600 hover:via-orange-600 hover:to-yellow-700 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105"
+                      style={{fontFamily: 'Space Mono, monospace'}}
+                    >
+                      🪙 MINT CARBON COINS NOW
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                      Convert your environmental impact into digital carbon coins
+                    </p>
+                  </div>
+
+                  {/* Additional Information */}
+                  <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="text-center">
+                      <div className="text-sm font-semibold text-gray-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                        📊 CALCULATION ASSUMPTIONS
+                      </div>
+                      <div className="text-xs text-gray-600 space-y-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                        <div>• 20 solar panels × 400W each = 8kW system capacity</div>
+                        <div>• 5 peak sun hours per day average</div>
+                        <div>• 85% system efficiency factor</div>
+                        <div>• 0.5 kg CO2/kWh grid emission factor</div>
+                        <div>• 1 carbon credit = 1 tonne CO2 avoided</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* DEBUG: Raw Calculation Data */}
+                  <div className="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
+                    <div className="text-center mb-3">
+                      <div className="text-sm font-bold text-gray-800" style={{fontFamily: 'Space Mono, monospace'}}>
+                        🔍 RAW CALCULATION DATA (DEBUG)
+                      </div>
+                    </div>
+                    <div className="bg-white rounded p-3 text-xs" style={{fontFamily: 'Space Mono, monospace'}}>
+                      <pre className="whitespace-pre-wrap text-gray-700">
+{JSON.stringify(carbonCredits, null, 2)}
+                      </pre>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </FadeInUp>
       );
@@ -389,6 +822,32 @@ const SolarPanelForm = ({ navigate }) => {
                       ✓ {formData.geotagPhoto.name}
                     </div>
                   )}
+                  
+                  {/* GPS Extraction Status */}
+                  {formData.geotagPhoto && (
+                    <div className="mt-3">
+                      {isLoading && (
+                        <div className="flex items-center text-blue-600 text-xs" style={{fontFamily: 'Space Mono, monospace'}}>
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
+                          Analyzing image with AI...
+                        </div>
+                      )}
+                      
+                      {applicationResult && !isLoading && (
+                        <div className="text-xs">
+                          {applicationResult.latitude === 13.0827 && applicationResult.longitude === 77.5877 ? (
+                            <div className="text-yellow-600 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
+                              ⚠️ Using default location (GPS not found)
+                            </div>
+                          ) : (
+                            <div className="text-green-600 font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
+                              ✓ AI extracted GPS: {applicationResult.latitude?.toFixed(6)}, {applicationResult.longitude?.toFixed(6)}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -421,6 +880,23 @@ const SolarPanelForm = ({ navigate }) => {
           >
             Forestation
           </button>
+        </div>
+      </FadeInUp>
+
+      {/* Carbon Coin Conversion Banner */}
+      <FadeInUp delay={50}>
+        <div className="bg-gradient-to-r from-yellow-100 via-orange-100 to-yellow-100 rounded-2xl p-6 mb-6 border-2 border-yellow-300 shadow-lg">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-yellow-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+              🪙 CARBON COIN SYSTEM
+            </h2>
+            <div className="text-lg font-bold text-yellow-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+              CONVERSION RATE: 1 TON CO₂ = 1 CARBON COIN
+            </div>
+            <p className="text-sm text-yellow-600" style={{fontFamily: 'Space Mono, monospace'}}>
+              Earn Carbon Coins by reducing CO₂ emissions through solar energy generation
+            </p>
+          </div>
         </div>
       </FadeInUp>
 

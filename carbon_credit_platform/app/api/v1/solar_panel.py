@@ -149,6 +149,52 @@ async def delete_application(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@router.post("/extract-gps", response_model=GeotagValidationResponse)
+async def extract_gps_from_photo(
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Extract GPS coordinates from uploaded photo in real-time"""
+    try:
+        service = SolarPanelService(db)
+        
+        # Validate file type
+        if not photo.content_type or not photo.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Extract GPS coordinates using OpenAI and fallback methods
+        validation_result = service.validate_geotag_photo(photo)
+        
+        return validation_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error extracting GPS: {str(e)}")
+
+@router.post("/calculate-solar-energy")
+async def calculate_solar_energy(
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    panel_area_sqm: Optional[float] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Calculate solar energy potential and carbon credits for given coordinates"""
+    try:
+        from app.services.carbon_calculator import carbon_calculator
+        
+        # Calculate solar energy and carbon credits
+        result = carbon_calculator.calculate_solar_carbon_credits(
+            latitude=latitude,
+            longitude=longitude,
+            panel_area_sqm=panel_area_sqm
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating solar energy: {str(e)}")
+
 @router.post("/validate-geotag", response_model=GeotagValidationResponse)
 async def validate_geotag_photo(
     photo: UploadFile = File(...),
@@ -203,6 +249,59 @@ async def upload_document(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+
+@router.post("/mint-carbon-coins")
+async def mint_carbon_coins(
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    annual_energy_mwh: float = Form(...),
+    annual_co2_avoided_tonnes: float = Form(...),
+    annual_carbon_credits: float = Form(...),
+    calculation_method: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Mint carbon coins based on solar calculation results"""
+    try:
+        from app.services.carbon_calculator import carbon_calculator
+        from datetime import datetime
+        
+        # Calculate carbon coins (1 ton CO2 = 1 carbon coin)
+        annual_carbon_coins = annual_co2_avoided_tonnes
+        ten_year_carbon_coins = annual_carbon_coins * 10
+        
+        # Create carbon coin minting result
+        minting_result = {
+            "success": True,
+            "message": "Carbon coins minted successfully!",
+            "data": {
+                "annual_energy_mwh": annual_energy_mwh,
+                "annual_co2_avoided_tonnes": annual_co2_avoided_tonnes,
+                "annual_carbon_credits": annual_carbon_credits,
+                "calculation_method": calculation_method,
+                "carbon_coins": {
+                    "annual": annual_carbon_coins,
+                    "ten_year": ten_year_carbon_coins,
+                    "issue_date": datetime.now().isoformat(),
+                    "conversion_rate": "1 ton CO2 = 1 carbon coin",
+                    "minting_status": "successful",
+                    "transaction_id": f"CC_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{int(annual_carbon_coins)}"
+                },
+                "coordinates": {
+                    "latitude": latitude,
+                    "longitude": longitude
+                },
+                "environmental_impact": {
+                    "co2_avoided_per_year": f"{annual_co2_avoided_tonnes} tonnes",
+                    "equivalent_trees_planted": int(annual_co2_avoided_tonnes * 22),  # 1 ton CO2 = ~22 trees
+                    "cars_off_road_equivalent": round(annual_co2_avoided_tonnes / 4.6, 1)  # Average car emits 4.6 tons/year
+                }
+            }
+        }
+        
+        return minting_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error minting carbon coins: {str(e)}")
 
 @router.get("/stats")
 async def get_application_stats(

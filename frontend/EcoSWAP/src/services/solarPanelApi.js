@@ -6,6 +6,13 @@ class SolarPanelApiService {
     this.baseURL = API_BASE_URL;
   }
 
+  async calculateCarbonCredits(applicationId) {
+    const response = await fetch(`${this.baseURL}/solar-panel/applications/${applicationId}/calculate-carbon-credits`, {
+      method: 'POST',
+    });
+    return this.handleResponse(response);
+  }
+
   // Helper method to handle API responses
   async handleResponse(response) {
     if (!response.ok) {
@@ -91,6 +98,36 @@ class SolarPanelApiService {
   }
 
 
+  // Calculate solar energy potential
+  async calculateSolarEnergy(latitude, longitude, panelAreaSqm = null) {
+    const formData = new FormData();
+    formData.append('latitude', latitude);
+    formData.append('longitude', longitude);
+    if (panelAreaSqm) {
+      formData.append('panel_area_sqm', panelAreaSqm);
+    }
+
+    const response = await fetch(`${this.baseURL}/solar-panel/calculate-solar-energy`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // Extract GPS coordinates from photo in real-time
+  async extractGpsFromPhoto(photo) {
+    const formData = new FormData();
+    formData.append('photo', photo);
+
+    const response = await fetch(`${this.baseURL}/solar-panel/extract-gps`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    return this.handleResponse(response);
+  }
+
   // Upload document
   async uploadDocument(file, fileType) {
     const formData = new FormData();
@@ -98,6 +135,24 @@ class SolarPanelApiService {
     formData.append('file_type', fileType);
 
     const response = await fetch(`${this.baseURL}/solar-panel/upload-document`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // Mint carbon coins based on solar calculation results
+  async mintCarbonCoins(solarCalculationData) {
+    const formData = new FormData();
+    formData.append('latitude', solarCalculationData.latitude);
+    formData.append('longitude', solarCalculationData.longitude);
+    formData.append('annual_energy_mwh', solarCalculationData.annual_energy_mwh);
+    formData.append('annual_co2_avoided_tonnes', solarCalculationData.annual_co2_avoided_tonnes);
+    formData.append('annual_carbon_credits', solarCalculationData.annual_carbon_credits);
+    formData.append('calculation_method', solarCalculationData.calculation_method);
+
+    const response = await fetch(`${this.baseURL}/solar-panel/mint-carbon-coins`, {
       method: 'POST',
       body: formData,
     });

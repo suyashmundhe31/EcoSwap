@@ -11,6 +11,7 @@ from app.schemas.forestation import (
     ForestationApplicationUpdate,
     GeotagValidationResponse
 )
+from app.services.geotag_extractor import GeotagExtractor
 
 class ForestationService:
     def __init__(self, db: Session):
@@ -52,14 +53,37 @@ class ForestationService:
             return f"error_saving_{file_type}_{uuid.uuid4()}"
     
     def validate_geotag_photo(self, file) -> GeotagValidationResponse:
-        """Accept geotag photo without validation"""
-        # Simply accept the file without any validation
-        return GeotagValidationResponse(
-            is_valid=True,
-            latitude=13.874957858,  # Mock coordinates
-            longitude=-310.454364430,  # Mock coordinates
-            message="Photo accepted"
-        )
+        """Validate geotag photo and extract GPS coordinates using OpenAI Vision API - NO FALLBACKS"""
+        try:
+            # Save file temporarily to extract EXIF data
+            temp_path = self._save_file(file, "image")
+            
+            # Extract GPS coordinates using OpenAI Vision API
+            extractor = GeotagExtractor()
+            validation_result = extractor.validate_geotagged_image(temp_path)
+            
+            # Only accept photos with real GPS data - NO FALLBACKS
+            if not validation_result['is_valid']:
+                return GeotagValidationResponse(
+                    is_valid=False,
+                    latitude=None,
+                    longitude=None,
+                    message="No GPS coordinates found in image. Please ensure your photo has GPS metadata embedded in the image file."
+                )
+            
+            return GeotagValidationResponse(
+                is_valid=validation_result['is_valid'],
+                latitude=validation_result['latitude'],
+                longitude=validation_result['longitude'],
+                message=validation_result['message']
+            )
+        except Exception as e:
+            return GeotagValidationResponse(
+                is_valid=False,
+                latitude=None,
+                longitude=None,
+                message=f"Error processing image: {str(e)}"
+            )
     
     def create_application(
         self, 
@@ -204,3 +228,58 @@ class ForestationService:
             "pending_applications": pending_applications,
             "approved_applications": approved_applications
         }
+    
+    def calculate_forestation_carbon_credits(self, latitude: float, longitude: float, area_hectares: float = 1.0) -> dict:
+        """Calculate carbon credits for forestation projects - 1 ton CO2 = 1 carbon coin"""
+        try:
+            # Forestation carbon sequestration rates (tons CO2 per hectare per year)
+            # These are conservative estimates based on IPCC guidelines
+            
+            # Different forest types have different sequestration rates
+            tropical_forest_rate = 15.0  # tons CO2/hectare/year
+            temperate_forest_rate = 8.0   # tons CO2/hectare/year
+            boreal_forest_rate = 5.0      # tons CO2/hectare/year
+            
+            # Determine forest type based on latitude
+            if abs(latitude) <= 23.5:  # Tropical zone
+                sequestration_rate = tropical_forest_rate
+                forest_type = "Tropical Forest"
+            elif abs(latitude) <= 66.5:  # Temperate zone
+                sequestration_rate = temperate_forest_rate
+                forest_type = "Temperate Forest"
+            else:  # Boreal zone
+                sequestration_rate = boreal_forest_rate
+                forest_type = "Boreal Forest"
+            
+            # Calculate annual carbon sequestration
+            annual_co2_sequestered = area_hectares * sequestration_rate
+            
+            # Carbon coins (1 ton CO2 = 1 carbon coin)
+            annual_carbon_coins = annual_co2_sequestered
+            
+            # 20-year projection (typical forest maturity period)
+            lifetime_co2_sequestered = annual_co2_sequestered * 20
+            lifetime_carbon_coins = annual_carbon_coins * 20
+            
+            return {
+                'success': True,
+                'data': {
+                    'forest_type': forest_type,
+                    'area_hectares': area_hectares,
+                    'sequestration_rate_per_hectare': sequestration_rate,
+                    'annual_co2_sequestered_tonnes': round(annual_co2_sequestered, 2),
+                    'annual_carbon_coins': round(annual_carbon_coins, 2),  # 1 ton CO2 = 1 carbon coin
+                    'lifetime_co2_sequestered_tonnes': round(lifetime_co2_sequestered, 2),
+                    'lifetime_carbon_coins': round(lifetime_carbon_coins, 2),  # 1 ton CO2 = 1 carbon coin
+                    'conversion_rate': '1 ton CO2 = 1 carbon coin',
+                    'calculation_method': 'IPCC Forest Carbon Sequestration Guidelines',
+                    'coordinates': f"{latitude}, {longitude}",
+                    'issue_date': datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Forestation carbon credit calculation failed: {str(e)}'
+            }

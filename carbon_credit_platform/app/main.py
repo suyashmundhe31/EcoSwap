@@ -1,8 +1,18 @@
 # app/main.py
+from dotenv import load_dotenv
+import os
+
+# Load environment variables at startup
+load_dotenv()
+
+# Verify environment variables are loaded
+print(f"OpenAI API Key loaded: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.database import engine, Base
+from app.api.v1.solar_panel import router as solar_panel_router
 
 # Create FastAPI app
 app = FastAPI(

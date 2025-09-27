@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import FadeInUp from '../../components/animations/FadeInUp';
+import MapComponent from '../../components/maps/MapComponent';
 import forestImage from '../../assets/treespanel.png';
 
 const ForestationForm = ({ navigate }) => {
@@ -136,44 +137,113 @@ const ForestationForm = ({ navigate }) => {
     }
 
     if (showMaps) {
+      // Extract coordinates from applicationResult if available
+      const extractedLat = applicationResult?.latitude || 13.0827;
+      const extractedLon = applicationResult?.longitude || 77.5877;
+      
       return (
         <FadeInUp>
           <div className="bg-gray-200 rounded-2xl p-6">
             <div className="text-center mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
-                Extracted Co-ordinates Summary (13.874957858, -310.454364430)
+                Extracted GPS Coordinates from Geotagged Photo
               </h3>
+              <p className="text-sm text-gray-600">
+                Latitude: {extractedLat.toFixed(6)}, Longitude: {extractedLon.toFixed(6)}
+              </p>
+              {extractedLat === 13.0827 && extractedLon === 77.5877 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ℹ️ Using default coordinates. Enable location services for accurate mapping.
+                </p>
+              )}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-300 rounded-xl h-64 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-200 to-blue-200"></div>
-                <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div className="bg-black text-white px-3 py-1 rounded text-sm font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
-                    Street View
-                  </div>
+              {/* Street View Map */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+                <div className="p-2 bg-gray-100">
+                  <h4 className="text-sm font-medium text-gray-700 text-center">Street View</h4>
                 </div>
+                <MapComponent 
+                  latitude={extractedLat} 
+                  longitude={extractedLon} 
+                  mapType="street" 
+                  title="Forestation Site"
+                  height="300px"
+                />
               </div>
 
-              <div className="bg-gray-300 rounded-xl h-64 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-400 to-green-600"></div>
-                <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                    <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+              {/* Satellite View Map */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+                <div className="p-2 bg-gray-100">
+                  <h4 className="text-sm font-medium text-gray-700 text-center">Satellite View</h4>
+                </div>
+                <MapComponent 
+                  latitude={extractedLat} 
+                  longitude={extractedLon} 
+                  mapType="satellite" 
+                  title="Forestation Site"
+                  height="300px"
+                />
+              </div>
+            </div>
+
+            {/* Carbon Coins Calculation Display */}
+            <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-300">
+              <div className="text-center mb-4">
+                <h4 className="text-lg font-bold text-green-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+                  🌳 FORESTATION CARBON COINS
+                </h4>
+                <div className="text-sm font-bold text-green-700 bg-green-200 px-3 py-1 rounded-full inline-block" style={{fontFamily: 'Space Mono, monospace'}}>
+                  CONVERSION RATE: 1 TON CO2 = 1 CARBON COIN
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-2xl font-bold text-green-600 mb-1">
+                    ~8 coins/year
                   </div>
-                  <div className="bg-black text-white px-3 py-1 rounded text-sm font-medium" style={{fontFamily: 'Space Mono, monospace'}}>
-                    Satellite View
+                  <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                    Per Hectare (Temperate)
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                    = ~8 tons CO₂ sequestered
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                  <div className="text-2xl font-bold text-blue-600 mb-1">
+                    ~160 coins
+                  </div>
+                  <div className="text-sm font-semibold text-gray-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                    20-Year Total
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                    = ~160 tons CO₂ sequestered
                   </div>
                 </div>
               </div>
+              
+              <div className="mt-4 p-3 bg-green-200 rounded-lg border border-green-400">
+                <div className="text-center">
+                  <div className="text-sm font-bold text-green-800 mb-1" style={{fontFamily: 'Space Mono, monospace'}}>
+                    💰 CARBON COIN CONVERSION
+                  </div>
+                  <div className="text-xs text-green-700" style={{fontFamily: 'Space Mono, monospace'}}>
+                    Every 1 ton of CO₂ sequestered = 1 Carbon Coin earned
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setShowFinalResult(true)}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Proceed to Final Results
+              </button>
             </div>
           </div>
         </FadeInUp>
@@ -285,6 +355,23 @@ const ForestationForm = ({ navigate }) => {
           >
             Forestation
           </button>
+        </div>
+      </FadeInUp>
+
+      {/* Carbon Coin Conversion Banner */}
+      <FadeInUp delay={50}>
+        <div className="bg-gradient-to-r from-green-100 via-blue-100 to-green-100 rounded-2xl p-6 mb-6 border-2 border-green-300 shadow-lg">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-green-800 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+              🌳 CARBON COIN SYSTEM
+            </h2>
+            <div className="text-lg font-bold text-green-700 mb-2" style={{fontFamily: 'Space Mono, monospace'}}>
+              CONVERSION RATE: 1 TON CO₂ = 1 CARBON COIN
+            </div>
+            <p className="text-sm text-green-600" style={{fontFamily: 'Space Mono, monospace'}}>
+              Earn Carbon Coins by sequestering CO₂ through forestation projects
+            </p>
+          </div>
         </div>
       </FadeInUp>
 
