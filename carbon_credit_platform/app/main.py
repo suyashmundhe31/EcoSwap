@@ -1,14 +1,14 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.carbon_credit_routes import router as carbon_credit_router
+from app.api.v1.api import api_router
 from app.database import engine, Base
 
 # Create FastAPI app
 app = FastAPI(
     title="Carbon Credit Platform API",
     version="1.0.0",
-    description="API for Carbon Credit Platform with Alembic integration"
+    description="API for Carbon Credit Platform"
 )
 
 # Add CORS middleware
@@ -23,8 +23,8 @@ app.add_middleware(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Include routers
-app.include_router(carbon_credit_router, prefix="/api/v1")
+# Include the main API router with v1 prefix
+app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

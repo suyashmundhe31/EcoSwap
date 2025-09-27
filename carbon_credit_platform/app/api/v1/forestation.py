@@ -1,0 +1,314 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from sqlalchemy.orm import Session
+from typing import List, Optional
+import json
+
+from app.database import get_db
+from app.models.forestation import ForestationApplication
+from app.services.forestation_service import ForestationService
+from app.schemas.forestation import (
+    ForestationApplicationCreate,
+    ForestationApplicationUpdate,
+    ForestationApplicationResponse,
+    ForestationApplicationList,
+    FileUploadResponse,
+    GeotagValidationResponse
+)
+
+router = APIRouter(prefix="/forestation", tags=["forestation"])
+
+@router.post("/applications", response_model=ForestationApplicationResponse)
+async def create_forestation_application(
+    full_name: str = Form(...),
+    aadhar_card: str = Form(...),
+    ownership_document: Optional[UploadFile] = File(None),
+    geotag_photo: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    """Create a new forestation application"""
+    try:
+        # Create application data
+        application_data = ForestationApplicationCreate(
+            full_name=full_name,
+            aadhar_card=aadhar_card
+        )
+        
+        # Initialize service
+        service = ForestationService(db)
+        
+        # For now, use a mock user_id (in real app, get from JWT token)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        # Create application
+        application = service.create_application(
+            user_id=user_id,
+            application_data=application_data,
+            ownership_document=ownership_document,
+            geotag_photo=geotag_photo
+        )
+        
+        return application
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.get("/applications", response_model=ForestationApplicationList)
+async def get_user_applications(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Get all forestation applications for the current user"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        applications = service.get_user_applications(user_id, skip, limit)
+        total = db.query(ForestationApplication).filter(
+            ForestationApplication.user_id == user_id
+        ).count()
+        
+        return ForestationApplicationList(
+            applications=applications,
+            total=total,
+            page=skip // limit + 1,
+            size=limit
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.get("/applications/{application_id}", response_model=ForestationApplicationResponse)
+async def get_application(
+    application_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a specific forestation application"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        application = service.get_application(application_id, user_id)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        return application
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.put("/applications/{application_id}", response_model=ForestationApplicationResponse)
+async def update_application(
+    application_id: int,
+    update_data: ForestationApplicationUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a forestation application"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        application = service.update_application(application_id, user_id, update_data)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        return application
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.delete("/applications/{application_id}")
+async def delete_application(
+    application_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a forestation application"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        success = service.delete_application(application_id, user_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        return {"message": "Application deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.post("/validate-geotag", response_model=GeotagValidationResponse)
+async def validate_geotag_photo(
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Validate if uploaded photo contains geotag data"""
+    try:
+        service = ForestationService(db)
+        validation_result = service.validate_geotag_photo(photo)
+        return validation_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error validating photo: {str(e)}")
+
+@router.post("/upload-document", response_model=FileUploadResponse)
+async def upload_document(
+    file: UploadFile = File(...),
+    file_type: str = Form(...),  # "ownership", "geotag"
+    db: Session = Depends(get_db)
+):
+    """Upload a document for forestation application"""
+    try:
+        service = ForestationService(db)
+        
+        # Validate file type
+        allowed_types = {
+            "ownership": ["pdf", "doc", "docx"],
+            "geotag": ["jpg", "jpeg", "png"]
+        }
+        
+        if file_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        
+        file_extension = file.filename.split('.')[-1].lower()
+        if file_extension not in allowed_types[file_type]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid file format. Allowed: {', '.join(allowed_types[file_type])}"
+            )
+        
+        # Save file
+        file_path = service._save_file(file, file_extension)
+        
+        return FileUploadResponse(
+            message="File uploaded successfully",
+            file_path=file_path,
+            file_type=file_type
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+
+@router.get("/stats")
+async def get_application_stats(
+    db: Session = Depends(get_db)
+):
+    """Get application statistics for the current user"""
+    try:
+        service = ForestationService(db)
+        user_id = 1  # TODO: Get from authenticated user
+        
+        stats = service.get_application_stats(user_id)
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Admin endpoints
+@router.get("/admin/applications", response_model=ForestationApplicationList)
+async def get_all_applications_admin(
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get all forestation applications (admin only)"""
+    try:
+        service = ForestationService(db)
+        applications = service.get_all_applications(skip, limit, status)
+        
+        # Get total count
+        query = db.query(ForestationApplication)
+        if status:
+            query = query.filter(ForestationApplication.status == status)
+        total = query.count()
+        
+        return ForestationApplicationList(
+            applications=applications,
+            total=total,
+            page=skip // limit + 1,
+            size=limit
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.put("/admin/applications/{application_id}/status")
+async def update_application_status(
+    application_id: int,
+    status: str = Form(...),
+    verification_notes: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Update application status (admin only)"""
+    try:
+        service = ForestationService(db)
+        
+        # Find application
+        application = db.query(ForestationApplication).filter(
+            ForestationApplication.id == application_id
+        ).first()
+        
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Update status
+        update_data = ForestationApplicationUpdate(
+            status=status,
+            verification_notes=verification_notes
+        )
+        
+        updated_application = service.update_application(
+            application_id, 
+            application.user_id, 
+            update_data
+        )
+        
+        return updated_application
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# Additional utility endpoints
+@router.get("/health")
+async def forestation_health_check():
+    """Health check for forestation module"""
+    return {
+        "module": "forestation",
+        "status": "healthy",
+        "endpoints": [
+            "/applications",
+            "/applications/{id}",
+            "/validate-geotag",
+            "/upload-document",
+            "/stats",
+            "/admin/applications"
+        ]
+    }
+
+@router.get("/")
+async def forestation_info():
+    """Get information about the forestation module"""
+    return {
+        "module": "forestation",
+        "description": "Carbon credit platform forestation application management",
+        "version": "1.0.0",
+        "features": [
+            "Application submission",
+            "Document upload",
+            "Geotag validation",
+            "Application tracking",
+            "Admin management"
+        ]
+    }
