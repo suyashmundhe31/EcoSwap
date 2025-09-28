@@ -4,7 +4,7 @@ import FadeInUp from '../components/animations/FadeInUp';
 const HomePage = ({ navigate }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-6">
-      <div className="max-w-4xl mx-auto text-center">
+      <div className="max-w-6xl mx-auto text-center">
         {/* Logo */}
         <FadeInUp>
           <div className="flex items-center justify-center mb-8">
@@ -27,7 +27,7 @@ const HomePage = ({ navigate }) => {
 
         {/* Route Options */}
         <FadeInUp delay={400}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Enterprise Option */}
             <div 
               onClick={() => navigate('/enterprise')}
@@ -70,6 +70,30 @@ const HomePage = ({ navigate }) => {
               </div>
               <div className="flex items-center justify-center text-green-600 font-semibold group-hover:text-green-700">
                 <span>Enter Portal</span>
+                <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Authority Option */}
+            <div 
+              onClick={() => navigate('/authority')}
+              className="group bg-white rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-purple-200 hover:-translate-y-2"
+            >
+              <div className="mb-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform duration-300">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-3">Authority</h2>
+                <p className="text-gray-600 leading-relaxed">
+                  Government oversight dashboard for monitoring carbon transactions and regulatory compliance.
+                </p>
+              </div>
+              <div className="flex items-center justify-center text-purple-600 font-semibold group-hover:text-purple-700">
+                <span>Enter Authority</span>
                 <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                 </svg>

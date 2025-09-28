@@ -12,6 +12,10 @@ import UserIssueCoins from './pages/user/UserIssueCoins';
 import SolarPanelForm from './pages/user/SolarPanelForm';
 import ForestationForm from './pages/user/ForestationForm';
 
+// Authority Pages
+import AuthorityDashboard from './pages/authority/AuthorityDashboard';
+import CompanyTransactions from './pages/authority/CompanyTransactions';
+
 // Home Page
 import HomePage from './pages/HomePage';
 
@@ -28,7 +32,7 @@ function App() {
   // Handle browser back/forward buttons
   useEffect(() => {
     const handlePopState = (event) => {
-      const path = event.state?.path || '/';
+      const path = event.state?.path || window.location.pathname + window.location.search;
       console.log('Browser navigation to:', path);
       setCurrentPath(path);
     };
@@ -36,18 +40,22 @@ function App() {
     // Listen for browser back/forward
     window.addEventListener('popstate', handlePopState);
 
-    // Initialize browser history
-    window.history.replaceState({ path: currentPath }, '', currentPath);
+    // Initialize current path from URL
+    const initialPath = window.location.pathname + window.location.search;
+    setCurrentPath(initialPath);
 
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [currentPath]);
+  }, []);
 
   const renderCurrentPage = () => {
     console.log('Current path:', currentPath);
+    
+    // Extract the pathname without query parameters for routing
+    const pathname = currentPath.split('?')[0];
 
-    switch (currentPath) {
+    switch (pathname) {
       case '/':
         return <HomePage navigate={navigate} />;
       
@@ -72,6 +80,13 @@ function App() {
         console.log('Rendering ForestationForm');
         return <ForestationForm navigate={navigate} />;
       
+      // Authority routes
+      case '/authority':
+        return <AuthorityDashboard navigate={navigate} />;
+      case '/authority/company-transactions':
+        console.log('Rendering CompanyTransactions');
+        return <CompanyTransactions navigate={navigate} />;
+      
       default:
         console.log('Unknown path, redirecting to home:', currentPath);
         return <HomePage navigate={navigate} />;
@@ -79,13 +94,15 @@ function App() {
   };
 
   // Determine if we should show layout (not for home page)
-  const showLayout = currentPath !== '/';
+  const showLayout = !currentPath.startsWith('/') || currentPath !== '/';
   const isEnterprise = currentPath.startsWith('/enterprise');
   const isUser = currentPath.startsWith('/user');
+  const isAuthority = currentPath.startsWith('/authority');
 
-  console.log('App render - showLayout:', showLayout, 'isEnterprise:', isEnterprise, 'isUser:', isUser);
+  console.log('App render - showLayout:', showLayout, 'isEnterprise:', isEnterprise, 'isUser:', isUser, 'isAuthority:', isAuthority);
 
-  if (!showLayout) {
+  // Show homepage without layout
+  if (currentPath === '/') {
     return renderCurrentPage();
   }
 
@@ -95,6 +112,7 @@ function App() {
       navigate={navigate}
       isEnterprise={isEnterprise}
       isUser={isUser}
+      isAuthority={isAuthority}
     >
       {renderCurrentPage()}
     </Layout>

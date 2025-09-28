@@ -2,9 +2,15 @@ import React from 'react';
 
 const RetirementTable = ({ data }) => {
   const getStatusStyle = (status) => {
-    return status === 'Completed' 
-      ? 'bg-green-100 text-green-800 border-green-200' 
-      : 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    const statusLower = status.toLowerCase();
+    if (statusLower === 'completed') {
+      return 'bg-green-100 text-green-800 border-green-200';
+    } else if (statusLower === 'pending') {
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    } else if (statusLower === 'failed') {
+      return 'bg-red-100 text-red-800 border-red-200';
+    }
+    return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   // Function to export data as CSV
@@ -56,27 +62,32 @@ const RetirementTable = ({ data }) => {
       
       {/* Table Body */}
       <div className="space-y-3">
-        {data.map((item, index) => (
-          <div 
-            key={item.id} 
-            className="grid grid-cols-4 gap-4 py-3 text-sm items-center hover:bg-gray-50 rounded-lg transition-colors duration-200 px-2 -mx-2"
-          >
-            <div className="font-medium text-gray-800">
-              {item.id}
+        {data.map((item, index) => {
+          const retirementId = item.retirement_id || item.id;
+          const status = item.retirement_status || item.status;
+          
+          return (
+            <div 
+              key={retirementId} 
+              className="grid grid-cols-4 gap-4 py-3 text-sm items-center hover:bg-gray-50 rounded-lg transition-colors duration-200 px-2 -mx-2"
+            >
+              <div className="font-medium text-gray-800">
+                {retirementId}
+              </div>
+              <div className="text-gray-600">
+                {item.retirement_date || item.date}
+              </div>
+              <div className="font-semibold text-gray-900">
+                {item.coins_retired || item.coins}
+              </div>
+              <div>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusStyle(status)}`}>
+                  {status}
+                </span>
+              </div>
             </div>
-            <div className="text-gray-600">
-              {item.date}
-            </div>
-            <div className="font-semibold text-gray-900">
-              {item.coins}
-            </div>
-            <div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusStyle(item.status)}`}>
-                {item.status}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       
       {/* View More Button */}

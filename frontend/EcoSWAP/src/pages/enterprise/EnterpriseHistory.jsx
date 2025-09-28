@@ -3,7 +3,7 @@ import FadeInUp from '../../components/animations/FadeInUp';
 import PurchaseHistory from '../../components/dashboard/PurchaseHistory';
 import { PURCHASE_HISTORY } from '../../utils/constants';
 
-const EnterpriseHistory = () => {
+const EnterpriseHistory = ({ onCoinsUpdate, userCoins }) => {
   const [filteredHistory, setFilteredHistory] = useState(PURCHASE_HISTORY);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');

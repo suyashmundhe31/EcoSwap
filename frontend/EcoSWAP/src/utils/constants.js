@@ -130,6 +130,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 3200,
     type: 'solar',
+    source: 'solar_plant',
     available: true
   },
   {
@@ -138,6 +139,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 5200,
     type: 'forest',
+    source: 'forestation',
     available: true
   },
   {
@@ -146,6 +148,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 5200,
     type: 'solar',
+    source: 'solar_plant',
     available: true
   },
   {
@@ -154,6 +157,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 3200,
     type: 'solar',
+    source: 'solar_plant',
     available: true
   },
   {
@@ -162,6 +166,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 3200,
     type: 'solar',
+    source: 'solar_plant',
     available: true
   },
   {
@@ -170,6 +175,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 5200,
     type: 'forest',
+    source: 'forestation',
     available: true
   },
   {
@@ -178,6 +184,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 5200,
     type: 'forest',
+    source: 'forestation',
     available: true
   },
   {
@@ -186,6 +193,7 @@ export const MARKETPLACE_DATA = [
     location: 'Kolhapur, Mumbai',
     coins: 5200,
     type: 'solar',
+    source: 'solar_plant',
     available: true
   }
 ];

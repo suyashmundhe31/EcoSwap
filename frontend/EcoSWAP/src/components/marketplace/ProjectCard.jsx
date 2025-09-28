@@ -1,50 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
+import PurchaseModal from './PurchaseModal';
 
-const ProjectCard = ({ project, solarImage, forestImage, coinImage }) => {
-  const getProjectImage = () => {
-    if (project.type === 'solar' && solarImage) {
-      return solarImage;
-    } else if (project.type === 'forest' && forestImage) {
-      return forestImage;
+const ProjectCard = ({ project, solarImage, forestImage, coinImage, onPurchaseSuccess, userId = 1 }) => {
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+
+  const handlePurchaseClick = () => {
+    setIsPurchaseModalOpen(true);
+  };
+
+  const handlePurchaseSuccess = (purchaseResult) => {
+    // Notify parent component of successful purchase
+    if (onPurchaseSuccess) {
+      onPurchaseSuccess(purchaseResult);
     }
-    
-    // Fallback illustrations (no background)
-    if (project.type === 'solar') {
+  };
+
+  const getProjectImage = () => {
+    // Use source field to determine image type
+    if ((project.source === 'solar' || project.source === 'solar_panel' || project.source === 'solar_plant') && solarImage) {
       return (
-        <div className="w-full h-full flex items-center justify-center relative">
-          {/* Solar Panel Illustration */}
-          <div className="relative">
-            <div className="w-20 h-12 bg-blue-600 rounded transform -rotate-12 shadow-lg"></div>
-            <div className="w-20 h-12 bg-blue-500 rounded transform -rotate-6 absolute top-1 left-1 shadow-md"></div>
-            <div className="w-20 h-12 bg-blue-400 rounded absolute top-2 left-2"></div>
-            {/* Sun */}
-            <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full">
-              <div className="absolute inset-1 bg-yellow-300 rounded-full"></div>
-            </div>
-          </div>
-        </div>
+        <img 
+          src={solarImage}
+          alt={project.title}
+          className="w-full h-full object-cover rounded-lg"
+        />
+      );
+    } else if (project.source === 'forestation' && forestImage) {
+      return (
+        <img 
+          src={forestImage}
+          alt={project.title}
+          className="w-full h-full object-cover rounded-lg"
+        />
       );
     } else {
+      // Fallback for any other project types
       return (
-        <div className="w-full h-full flex items-center justify-center relative">
-          {/* Tree Illustration */}
-          <div className="flex space-x-2">
-            <div className="relative">
-              <div className="w-3 h-16 bg-amber-600 rounded-full"></div>
-              <div className="absolute -top-4 -left-2 w-8 h-8 bg-green-500 rounded-full"></div>
-              <div className="absolute -top-6 -left-1 w-6 h-6 bg-green-600 rounded-full"></div>
-            </div>
-            <div className="relative">
-              <div className="w-3 h-20 bg-amber-700 rounded-full"></div>
-              <div className="absolute -top-6 -left-3 w-10 h-10 bg-green-400 rounded-full"></div>
-              <div className="absolute -top-8 -left-2 w-7 h-7 bg-green-500 rounded-full"></div>
-            </div>
-            <div className="relative">
-              <div className="w-3 h-18 bg-amber-600 rounded-full"></div>
-              <div className="absolute -top-5 -left-2 w-8 h-8 bg-green-600 rounded-full"></div>
-              <div className="absolute -top-7 -left-1 w-6 h-6 bg-green-500 rounded-full"></div>
-            </div>
-          </div>
+        <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded-lg">
+          <div className="text-gray-500 text-sm">No Image</div>
         </div>
       );
     }
@@ -79,9 +72,9 @@ const ProjectCard = ({ project, solarImage, forestImage, coinImage }) => {
       <div className="flex items-end space-x-4">
         {/* Project Image - Left side (larger, no background) */}
         <div className="w-35 h-28">
-          {(project.type === 'solar' && solarImage) || (project.type === 'forest' && forestImage) ? (
+          {((project.source === 'solar' || project.source === 'solar_panel' || project.source === 'solar_plant') && solarImage) || (project.source === 'forestation' && forestImage) ? (
             <img 
-              src={project.type === 'solar' ? solarImage : forestImage}
+              src={(project.source === 'solar' || project.source === 'solar_panel' || project.source === 'solar_plant') ? solarImage : forestImage}
               alt={project.title}
               className="w-full h-full object-cover rounded-lg"
             />
@@ -92,11 +85,28 @@ const ProjectCard = ({ project, solarImage, forestImage, coinImage }) => {
 
         {/* Purchase Button - Right side (medium) */}
         <div className="flex-1">
-          <button className="w-full bg-black text-white py-3 px-6 rounded-full text-sm font-medium hover:bg-gray-800 transition-colors duration-200 hover:shadow-md">
-            Purchase
+          <button 
+            onClick={handlePurchaseClick}
+            disabled={project.coins === 0}
+            className={`w-full py-3 px-6 rounded-full text-sm font-medium transition-colors duration-200 hover:shadow-md ${
+              project.coins === 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-black text-white hover:bg-gray-800'
+            }`}
+          >
+            {project.coins === 0 ? 'Sold Out' : 'Purchase'}
           </button>
         </div>
       </div>
+
+      {/* Purchase Modal */}
+      <PurchaseModal
+        project={project}
+        isOpen={isPurchaseModalOpen}
+        onClose={() => setIsPurchaseModalOpen(false)}
+        onPurchaseSuccess={handlePurchaseSuccess}
+        userId={userId}
+      />
     </div>
   );
 };
