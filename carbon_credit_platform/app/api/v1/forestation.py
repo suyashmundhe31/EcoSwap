@@ -549,65 +549,79 @@ async def mint_coin_simple(
         raise HTTPException(status_code=500, detail=f"Error minting forestation coin: {str(e)}")
 
 @router.get("/mint-coin")
-async def get_mint_coin_info(
-    name: Optional[str] = None,
-    source: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
+async def mint_coin_from_forestry(
     db: Session = Depends(get_db)
 ):
-    """GET endpoint to retrieve forestation minted coin information with optional filtering"""
+    """Get all available minted coins from forestry projects for marketplace"""
     try:
-        from app.services.marketplace_service import MarketplaceService
-        from app.schemas.marketplace import SourceType
+        from app.models.marketplace import MarketplaceCredit
         
-        marketplace_service = MarketplaceService(db)
+        # Get all forestry marketplace credits
+        forestry_credits = db.query(MarketplaceCredit).filter(
+            MarketplaceCredit.source_type == 'FORESTATION',
+            MarketplaceCredit.coins_issued > 0  # Only show credits that are available
+        ).all()
         
-        # Get all forestation marketplace credits
-        credits, total_count = marketplace_service.get_marketplace_credits(
-            skip=skip, 
-            limit=limit, 
-            source_type=SourceType.FORESTATION
-        )
+        if not forestry_credits:
+            return {
+                'success': True,
+                'minted_coins': [],
+                'message': 'No forestry credits available in marketplace'
+            }
         
-        # Apply filters if provided
-        filtered_credits = []
-        for credit in credits:
-            # Filter by name if provided
-            if name and name.lower() not in credit.issuer_name.lower():
-                continue
-            
-            # Filter by source if provided
-            if source and source != "forestation":
-                continue
-                
-            filtered_credits.append({
-                "id": credit.id,
-                "name": credit.issuer_name,
-                "credits": credit.coins_issued,
-                "source": "forestation",
-                "description": credit.description,
-                "tokenized_date": credit.issue_date.isoformat(),
-                "application_id": credit.source_project_id,
-                "price_per_coin": credit.price_per_coin,
-                "issuer_id": credit.issuer_id
+        # Format response to match expected structure
+        minted_coins = []
+        for credit in forestry_credits:
+            minted_coins.append({
+                'id': credit.id,
+                'name': credit.issuer_name,
+                'credits': credit.coins_issued,
+                'description': credit.description,
+                'source': credit.source_type.value.lower(),
+                'tokenized_date': credit.issue_date.isoformat() if credit.issue_date else None,
+                'location': f"Project ID: {credit.source_project_id}",
+                'coins': credit.coins_issued
             })
         
         return {
-            "success": True,
-            "minted_coins": filtered_credits,
-            "total": len(filtered_credits),
-            "filters_applied": {
-                "name": name,
-                "source": source,
-                "skip": skip,
-                "limit": limit
-            },
-            "message": f"Retrieved {len(filtered_credits)} forestation minted coins"
+            'success': True,
+            'minted_coins': minted_coins,
+            'total_credits': sum(credit.coins_issued for credit in forestry_credits),
+            'total_projects': len(forestry_credits)
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving forestation minted coins: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch forestry credits: {str(e)}"
+        )
+
+@router.post("/applications/{application_id}/mint-coin")
+async def mint_coin_from_application(
+    application_id: int,
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mint carbon coins from a specific forestry application"""
+    try:
+        service = ForestationService(db)
+        result = service.mint_coin_with_marketplace_integration(application_id, user_id)
+        
+        if not result.get('success', False):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get('error', 'Minting failed')
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Minting process failed: {str(e)}"
+        )
 
 # Analysis data endpoint
 @router.post("/analysis")
@@ -679,3 +693,55 @@ async def get_forestation_analysis_results(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving forestation analysis: {str(e)}")
+
+# PATCH endpoint to purchase/reduce credits from forestation minted coins
+@router.patch("/mint-coin/{coin_id}")
+async def purchase_forestation_mint_coin(
+    coin_id: int,
+    credits_to_purchase: float = Form(...),
+    user_id: int = Form(default=1),
+    db: Session = Depends(get_db)
+):
+    """Purchase credits from a forestation minted coin, reducing available credits"""
+    try:
+        from app.models.marketplace import MarketplaceCredit
+        
+        # Get the marketplace credit (forestation uses marketplace credits)
+        marketplace_credit = db.query(MarketplaceCredit).filter(
+            MarketplaceCredit.id == coin_id,
+            MarketplaceCredit.source_type == 'FORESTATION'
+        ).first()
+        
+        if not marketplace_credit:
+            raise HTTPException(status_code=404, detail="Forestation minted coin not found")
+        
+        # Check if enough credits available
+        if marketplace_credit.coins_issued < credits_to_purchase:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient credits. Available: {marketplace_credit.coins_issued}, Requested: {credits_to_purchase}"
+            )
+        
+        # Update the marketplace credit
+        original_credits = marketplace_credit.coins_issued
+        marketplace_credit.coins_issued -= credits_to_purchase
+        db.commit()
+        db.refresh(marketplace_credit)
+        
+        # Check if credits reached zero
+        is_sold_out = marketplace_credit.coins_issued == 0
+        
+        return {
+            "success": True,
+            "id": marketplace_credit.id,
+            "name": marketplace_credit.issuer_name,
+            "credits_purchased": credits_to_purchase,
+            "remaining_credits": marketplace_credit.coins_issued,
+            "is_sold_out": is_sold_out,
+            "message": f"Successfully purchased {credits_to_purchase} credits from {marketplace_credit.issuer_name}. {marketplace_credit.coins_issued} credits remaining."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error purchasing forestation credits: {str(e)}")

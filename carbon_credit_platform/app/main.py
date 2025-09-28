@@ -1,6 +1,8 @@
 # app/main.py
+
 from dotenv import load_dotenv
 import os
+
 
 # Load environment variables at startup
 load_dotenv()
@@ -13,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.database import engine, Base
 from app.api.v1.solar_panel import router as solar_panel_router
+from app.api.v1.credit_retirement import router as retirement_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -38,6 +41,9 @@ app.include_router(api_router, prefix="/api/v1")
 
 # Include the solar panel router
 app.include_router(solar_panel_router, prefix="/api/v1")
+
+# Include the credit retirement router
+app.include_router(retirement_router, prefix="/api/v1", tags=["Credit Retirement"])
 
 @app.get("/")
 async def root():

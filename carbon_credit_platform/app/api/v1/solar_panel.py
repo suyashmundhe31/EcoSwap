@@ -705,3 +705,51 @@ async def get_minted_coin(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving minted coin: {str(e)}")
+
+# PATCH endpoint to purchase/reduce credits from minted coins
+@router.patch("/mint-coin/{coin_id}")
+async def purchase_mint_coin(
+    coin_id: int,
+    credits_to_purchase: float = Form(...),
+    user_id: int = Form(default=1),
+    db: Session = Depends(get_db)
+):
+    """Purchase credits from a minted coin, reducing available credits"""
+    try:
+        service = SolarPanelService(db)
+        
+        # Get the token
+        token = service.get_token(coin_id)
+        if not token:
+            raise HTTPException(status_code=404, detail="Minted coin not found")
+        
+        # Check if enough credits available
+        if token.credits < credits_to_purchase:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient credits. Available: {token.credits}, Requested: {credits_to_purchase}"
+            )
+        
+        # Update the token credits
+        original_credits = token.credits
+        token.credits -= credits_to_purchase
+        db.commit()
+        db.refresh(token)
+        
+        # Check if credits reached zero
+        is_sold_out = token.credits == 0
+        
+        return {
+            "success": True,
+            "id": token.id,
+            "name": token.name,
+            "credits_purchased": credits_to_purchase,
+            "remaining_credits": token.credits,
+            "is_sold_out": is_sold_out,
+            "message": f"Successfully purchased {credits_to_purchase} credits from {token.name}. {token.credits} credits remaining."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error purchasing credits: {str(e)}")

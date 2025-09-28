@@ -862,3 +862,101 @@ class ForestationService:
                 'success': False,
                 'error': f'Failed to mint carbon coins: {str(e)}'
             }
+
+    def create_marketplace_credit_from_forestry(self, user_id: int, application_id: int, credits: float) -> Dict:
+        """Create marketplace credit entry from forestry analysis"""
+        try:
+            from app.models.marketplace import MarketplaceCredit
+            from app.models.user import User
+            
+            # Get application and user details
+            application = self.get_application(application_id, user_id)
+            user = self.db.query(User).filter(User.id == user_id).first()
+            
+            if not application:
+                return {'error': 'Application not found'}
+            
+            if not user:
+                return {'error': 'User not found'}
+            
+            # Create marketplace credit entry
+            marketplace_credit = MarketplaceCredit(
+                issuer_name=f"Forest Conservation - {application.full_name}",
+                issuer_id=user_id,
+                coins_issued=credits,
+                source_type='FORESTATION',
+                source_project_id=application_id,
+                description=f"Carbon credits from reforestation project by {application.full_name}. "
+                           f"Location: {application.latitude}, {application.longitude}",
+                price_per_coin=20.0  # Default price per coin
+            )
+            
+            self.db.add(marketplace_credit)
+            self.db.commit()
+            self.db.refresh(marketplace_credit)
+            
+            return {
+                'success': True,
+                'marketplace_credit_id': marketplace_credit.id,
+                'credits_created': credits,
+                'message': f'Successfully created marketplace credit with {credits} credits'
+            }
+            
+        except Exception as e:
+            self.db.rollback()
+            return {'error': f'Failed to create marketplace credit: {str(e)}'}
+
+    def mint_coin_with_marketplace_integration(self, application_id: int, user_id: int) -> Dict:
+        """Enhanced mint coin method that also creates marketplace credits"""
+        try:
+            # Perform the forest analysis and carbon credit calculation
+            analysis_result = asyncio.run(self.perform_complete_forest_analysis(application_id, user_id))
+            
+            if 'error' in analysis_result:
+                return {'error': f'Analysis failed: {analysis_result["error"]}'}
+            
+            # Extract carbon credits from analysis
+            carbon_calculations = analysis_result.get('carbon_credit_calculations', {})
+            credits_available = carbon_calculations.get('credits_available_for_minting', 0)
+            annual_carbon_coins = carbon_calculations.get('annual_carbon_coins', 0)
+            
+            # Use the higher value for minting
+            coins_to_mint = max(credits_available, annual_carbon_coins, 1.0)  # Minimum 1.0 coins
+            
+            # Create marketplace credit
+            marketplace_result = self.create_marketplace_credit_from_forestry(
+                user_id, application_id, coins_to_mint
+            )
+            
+            if 'error' in marketplace_result:
+                return {'error': f'Marketplace credit creation failed: {marketplace_result["error"]}'}
+            
+            # Get user and application details for response
+            application = self.get_application(application_id, user_id)
+            from app.models.user import User
+            user = self.db.query(User).filter(User.id == user_id).first()
+            user_name = user.username if user else f"User_{user_id}"
+            
+            # Format the response for the API
+            response = {
+                'success': True,
+                'minted_coins': [{
+                    'id': marketplace_result['marketplace_credit_id'],
+                    'name': f"Forest Conservation - {application.full_name}" if application else f"Forest Project {application_id}",
+                    'credits': coins_to_mint,
+                    'description': f"Carbon credits from reforestation project by {user_name}",
+                    'source': 'forestation',
+                    'tokenized_date': datetime.utcnow().isoformat(),
+                    'user_id': user_id,
+                    'application_id': application_id
+                }],
+                'total_credits_minted': coins_to_mint,
+                'marketplace_credit_id': marketplace_result['marketplace_credit_id'],
+                'analysis_summary': carbon_calculations,
+                'message': f'Successfully minted {int(coins_to_mint)} carbon credits and added to marketplace!'
+            }
+            
+            return response
+            
+        except Exception as e:
+            return {'error': f'Mint coin process failed: {str(e)}'}
